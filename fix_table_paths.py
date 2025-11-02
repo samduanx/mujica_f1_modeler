@@ -32,7 +32,7 @@ def fix_file_paths(file_path, description=""):
         # 模式2: read_csv(filename.csv) -> read_csv("tables/filename.csv")
         content = re.sub(
             r'read_csv\(([^)]+\.csv[^)]*)\)',
-            lambda m: f'read_csv("tables/" + m.group(1).strip('"\'') + '")' if not m.group(1).strip().startswith('"tables/') else m.group(0),
+            lambda m: f'read_csv("tables/" + {m.group(1).strip("\"\'")} + ")' if not m.group(1).strip().startswith('"tables/') else m.group(0),
             content
         )
 

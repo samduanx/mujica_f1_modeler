@@ -2,3 +2,4 @@
 .claude/
 __pycache__/
 f1_cache/
+outputs/

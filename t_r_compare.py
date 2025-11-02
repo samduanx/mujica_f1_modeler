@@ -2,6 +2,7 @@ import fastf1
 from fastf1 import get_session
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
 
 # 设置matplotlib字体
 plt.rcParams["font.family"] = ["monospace", "Sarasa Term SC Nerd Font"]
