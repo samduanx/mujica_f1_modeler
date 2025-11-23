@@ -29,6 +29,14 @@ The system is created **almost entirely by vibe coding techniques**, therefore r
 
 * 部分文档由于Zed editor的agent prompt原因，会使用英文。
 
+## 运行
+
+### 大奖赛模拟
+
+````
+python main.py --gp-name 大奖赛名称
+````
+
 ## TODO
 - [x] 基本模型 | Basic features
   - [x] 基本圈速模拟与车手差异构建 | Basic laptime simulations and driver differention modeling

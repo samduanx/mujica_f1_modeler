@@ -1,14 +1,12 @@
+import argparse
 import fastf1
-from fastf1 import get_session
 import pandas as pd
 import matplotlib.pyplot as plt
-
 import numpy as np
 import random
 import os
 from collections import defaultdict
-import matplotlib.font_manager as fm
-import matplotlib.cm as cm
+
 
 ## Use non-interactive backend to avoid font and GUI issues
 # matplotlib.use("Agg")
@@ -29,6 +27,16 @@ plt.rcParams["font.family"] = [
 plt.rcParams["font.size"] = 16
 plt.rcParams["axes.unicode_minus"] = False
 
+# Output directories for simulation artifacts
+OUTPUT_BASE_DIR = os.path.join("outputs", "long_dist_sim")
+FIGS_OUTPUT_DIR = os.path.join(OUTPUT_BASE_DIR, "figs")
+REPORT_OUTPUT_DIR = os.path.join(OUTPUT_BASE_DIR, "reports")
+
+for directory in (FIGS_OUTPUT_DIR, REPORT_OUTPUT_DIR):
+    os.makedirs(directory, exist_ok=True)
+
+# Ensure cache directory exists before enabling FastF1 cache
+os.makedirs("f1_cache", exist_ok=True)
 # Enable FastF1 cache
 fastf1.Cache.enable_cache("f1_cache")
 fastf1.set_log_level("ERROR")
@@ -1161,10 +1169,19 @@ def calculate_degradation_with_cliff(
 def read_driver_data(csv_file):
     """Read driver data from CSV file"""
     try:
-        # Modify path to use tables/ subfolder
-        if not csv_file.startswith("tables/"):
-            csv_file = os.path.join("tables", csv_file)
-        df = pd.read_csv(csv_file, encoding="utf-8")
+        candidate_paths = []
+
+        if os.path.isabs(csv_file):
+            candidate_paths.append(csv_file)
+        else:
+            candidate_paths.append(csv_file)
+            candidate_paths.append(os.path.join("tables", csv_file))
+
+        csv_path = next((path for path in candidate_paths if os.path.exists(path)), None)
+        if csv_path is None:
+            raise FileNotFoundError(f"CSV file not found: {csv_file}")
+
+        df = pd.read_csv(csv_path, encoding="utf-8")
         driver_data = {}
 
         for index, row in df.iterrows():
@@ -1919,23 +1936,103 @@ def simulate_race_with_pit_stops(
     }
 
 
-def main():
-    # Check if we want to run pit stop distribution test
-    import sys
+DEFAULT_LAP_COUNTS = {
+    "bahrain": 57,
+    "spain": 66,
+    "monaco": 78,
+    "canada": 70,
+    "azerbaijan": 51,
+    "austria": 71,
+    "britain": 52,
+    "hungary": 70,
+    "belgium": 44,
+    "netherlands": 72,
+    "italy": 53,
+    "singapore": 61,
+    "japan": 53,
+    "usa": 56,
+    "mexico": 71,
+    "brazil": 71,
+    "abudhabi": 58,
+}
 
-    if len(sys.argv) > 1 and sys.argv[1] == "--test-pit-distribution":
+
+def build_arg_parser():
+    """Create the CLI argument parser for the race simulation."""
+
+    parser = argparse.ArgumentParser(
+        description="Run the long distance F1 race simulation with configurable inputs."
+    )
+    parser.add_argument(
+        "--year",
+        type=int,
+        default=2022,
+        help="Season year metadata used in reporting.",
+    )
+    parser.add_argument(
+        "--gp-name",
+        default="Spain",
+        help="Grand Prix name (used to locate tables/<gp>.csv and track metadata).",
+    )
+    parser.add_argument(
+        "--csv-file",
+        help="Explicit driver CSV path. Defaults to tables/<gp-name>.csv if omitted.",
+    )
+    parser.add_argument(
+        "--num-laps",
+        type=int,
+        help="Override the race lap count. Defaults to a track-specific value when available.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="Seed for random number generators to make the simulation reproducible.",
+    )
+    parser.add_argument(
+        "--test-pit-distribution",
+        action="store_true",
+        help="Run only the pit stop distribution diagnostic and exit.",
+    )
+    return parser
+
+
+def resolve_lap_count(gp_name, override):
+    """Determine the number of race laps, allowing overrides and per-track defaults."""
+
+    if override is not None:
+        return override
+
+    track_key = gp_name.lower().replace(" ", "")
+    return DEFAULT_LAP_COUNTS.get(track_key, 66)
+
+
+def main(argv=None):
+    """Run the long distance simulation with CLI argument support."""
+
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+
+    if args.test_pit_distribution:
         test_pit_stop_distribution()
         return
 
-    # Set parameters
-    year = 2022
-    gp_name = "Spain"
-    csv_file = os.path.join("tables", gp_name + ".csv")
-    num_laps = 66  # Spanish GP race laps
+    if args.seed is not None:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+
+    # Set parameters based on CLI options
+    year = args.year
+    gp_name = args.gp_name
+    csv_file = args.csv_file or os.path.join("tables", f"{gp_name}.csv")
+    csv_file = os.path.normpath(csv_file)
+    num_laps = resolve_lap_count(gp_name, args.num_laps)
 
     print("=== F1 Race Simulation - with Pit Strategy ===")
     print(f"Track: {gp_name}, Year: {year}")
     print("Run with --test-pit-distribution to test pit stop time distribution")
+    print(f"Driver data CSV: {csv_file}")
+    if args.seed is not None:
+        print(f"Random seed set to {args.seed}")
 
     # 1. Load driver data
     print(f"\n=== Loading Driver Data ===")
@@ -2321,11 +2418,10 @@ def generate_position_chart(positions_by_lap, track_name):
         left=0.08, right=0.85, top=0.93, bottom=0.08, hspace=0.3, wspace=0.2
     )
 
-    # Save chart to figs subfolder
-    figs_dir = "figs"
-    os.makedirs(figs_dir, exist_ok=True)
+    # Save chart to output figs subfolder
+    os.makedirs(FIGS_OUTPUT_DIR, exist_ok=True)
     chart_filename = os.path.join(
-        figs_dir, f"{track_name.lower()}_position_progression.png"
+        FIGS_OUTPUT_DIR, f"{track_name.lower()}_position_progression.png"
     )
     plt.savefig(chart_filename, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close()
@@ -2570,10 +2666,11 @@ def generate_laptime_scatter(results, positions_by_lap, track_name, sorted_resul
         left=0.08, right=0.88, top=0.90, bottom=0.10, hspace=0.3, wspace=0.2
     )
 
-    # Save chart to figs subfolder
-    figs_dir = "figs"
-    os.makedirs(figs_dir, exist_ok=True)
-    chart_filename = os.path.join(figs_dir, f"{track_name.lower()}_laptime_scatter.png")
+    # Save chart to output figs subfolder
+    os.makedirs(FIGS_OUTPUT_DIR, exist_ok=True)
+    chart_filename = os.path.join(
+        FIGS_OUTPUT_DIR, f"{track_name.lower()}_laptime_scatter.png"
+    )
     plt.savefig(chart_filename, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close()
 
@@ -2585,15 +2682,27 @@ def generate_markdown_report(
 ):
     """Generate comprehensive Markdown race report"""
 
-    # Create docs directory if it doesn't exist
-    docs_dir = "docs"
-    os.makedirs(docs_dir, exist_ok=True)
+    # Create reports directory if it doesn't exist
+    os.makedirs(REPORT_OUTPUT_DIR, exist_ok=True)
 
     # Generate filename
     timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     markdown_file = os.path.join(
-        docs_dir, f"{gp_name.lower()}_race_report_{timestamp}.md"
+        REPORT_OUTPUT_DIR, f"{gp_name.lower()}_race_report_{timestamp}.md"
     )
+
+    # Resolve relative paths for figures used in the report
+    position_chart_filename = f"{gp_name.lower()}_position_progression.png"
+    laptime_chart_filename = f"{gp_name.lower()}_laptime_scatter.png"
+    markdown_dir = os.path.dirname(markdown_file)
+    position_chart_rel = os.path.relpath(
+        os.path.join(FIGS_OUTPUT_DIR, position_chart_filename),
+        start=markdown_dir,
+    ).replace("\\", "/")
+    laptime_chart_rel = os.path.relpath(
+        os.path.join(FIGS_OUTPUT_DIR, laptime_chart_filename),
+        start=markdown_dir,
+    ).replace("\\", "/")
 
     with open(markdown_file, "w", encoding="utf-8") as f:
         # Header
@@ -2769,13 +2878,9 @@ def generate_markdown_report(
         # Charts section
         f.write("\n## 📊 Race Visualization\n\n")
         f.write("### 🏁 Position Progression\n\n")
-        f.write(
-            f"![Position Progression](../figs/{gp_name.lower()}_position_progression.png)\n\n"
-        )
+        f.write(f"![Position Progression]({position_chart_rel})\n\n")
         f.write("### ⏱️ Lap Time Distribution\n\n")
-        f.write(
-            f"![Lap Time Scatter](../figs/{gp_name.lower()}_laptime_scatter.png)\n\n"
-        )
+        f.write(f"![Lap Time Scatter]({laptime_chart_rel})\n\n")
 
         # Footer
         f.write("---\n")
