@@ -1,5 +1,12 @@
 .venv/
 .claude/
 __pycache__/
-f1_cache/
 outputs/
+tmp/
+f1_cache/
+src/__pycache__/
+src/drs/__pycache__/
+src/utils/__pycache__/
+src/core/__pycache__/
+src/tyre/__pycache__/
+src/simulation/__pycache__/

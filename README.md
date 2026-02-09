@@ -45,13 +45,13 @@ python main.py --gp-name 大奖赛名称
   - [ ] 轮胎套数限制模型构建 | Tyre overall usage (by sets) limit modeling
   - [ ] 车队升级机制移植 | Porting the current team/vehicle upgrades
   - [ ] 车手技能提升机制移植 | Porting the current driver upgrades
-- [x] 自由练习 | Free Practice sessions
+- [ ] 自由练习 | Free Practice sessions
 - [ ] 排位赛（含冲刺排位） | Qualifying sessions (incl. Sprint Qualifiers)
 - [ ] 冲刺赛 | Sprint sessions
 - [ ] 正赛 | Races
   - [x] 进站模拟 | Pit stop simulations
   - [x] 发车模拟 | Grid and start simulations
-  - [ ] 斗车、超车、DRS模拟 | Simulations of car battling, overtaking, and DRS usage
+  - [x] 斗车、超车、DRS模拟 | Simulations of car battling, overtaking, and DRS usage
   - [ ] 事故、红黄旗、（虚拟）安全车模拟 | Simulations of accidents, red/yellow flags, and (V)SC
 - [ ] 赛后内容 | After-race info
   - [ ] 赛事记录文档（含骰点）导出方法 | Exports of race records (including dice rolls)

@@ -14,6 +14,9 @@ dependencies = [
     "tqdm>=4.67.1",
 ]
 
+[project.scripts]
+drs-run = "drs.run_prototype:main"
+
 [dependency-groups]
 dev = [
     "ipykernel>=7.0.1",
@@ -21,3 +24,7 @@ dev = [
 
 [tool.basedpyright]
 typeCheckingMode = "standard"
+
+[tool.setuptools]
+# Configure egg-info to be generated in tmp/ directory
+egg-info = "tmp/mujica_f1_modeler.egg-info"
