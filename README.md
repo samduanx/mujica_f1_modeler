@@ -6,13 +6,13 @@ This is the simulation system codes for Formula 1 races, prepared for the author
 
 The previous system used an Excel spreadsheet (like what the Williams team used before) for the simulation. This version on GitHub provides a more integrated, mathematically reliable, and readable approach to the simulation.
 
-The system is created **almost entirely by vibe coding techniques**, therefore reliability cannot be assured. The coding is almost entirely powered by GLM-4.6, and slightly by Kimi-K2. Data of tracks and races are from Pirelli and analysis based on data from FastF1. Data may have copyright.
+The system is created **almost entirely by vibe coding techniques**, therefore reliability cannot be assured. The coding is powered by Minimax M2.1, Kimi K2 and 2.5, and also GLM 4.6. Data of tracks and races are from Pirelli and analysis based on data from FastF1. Data may have copyright.
 
 * Anchor based fanfics are created with the guidance of multiple dice rollings, providing a form similar to a board game and allowing readers to experience some sorts of randomness and the thrill of unexpected events. *Ave velocita* has adopted this system to a extent where dice rolls are used to create not only the stories but also the racing simulations.
 
 * This also means the fan-fic based on these codes will create races in a vastly different way from the previous chapters. Viewer discretion is advised.
 
-* For users and developers not knowing Chinese, due to the vibe coding process are all instructed in Chinese, documents created by the LLMs are also mostly in Chinese.
+* For users and developers not knowing Chinese, due to the vibe coding process are mostly instructed in Chinese, documents created by the LLMs are also mostly in Chinese.
 
 ---
 
@@ -21,13 +21,13 @@ The system is created **almost entirely by vibe coding techniques**, therefore r
 
 《竞速颂歌》的旧版赛事模拟器是通过一个威廉姆斯车队同款Excel表实现的。为了增强集成性、数学可靠性和（含骰点）的数据可读性，我们采用了本repo中的方式重构了模拟系统。
 
-本模拟系统的代码**几乎全部由vibe coding完成**，主要使用GLM-4.6（部分采用了Kimi-K2）实现。部分赛道数据来自Pirelli，部分来自对FastF1数据的直接分析。数据可能存在版权问题。
+本模拟系统的代码**几乎全部由vibe coding完成**，主要使用Minimax M2.1实现，同时使用了Kimi K2、K2.5及GLM 4.6等模型。部分赛道数据来自Pirelli，部分来自对FastF1数据的直接分析。数据可能存在版权问题。
 
 * 安科的具体定义可以在NGA安科版的置顶贴中找到，总而言之，安科是通过设定选择枝并以骰点方式随机选择选择枝的方式推进的同人或原创作品。《竞速颂歌》现有的系统中，除了用于处理剧情选择枝（含读者提供的安价），还用于进行赛事模拟。
 
 * 本安科在采用本工程建立的新系统后，生成的比赛过程会与过去版本产生巨大的差异。对此产生的不便敬请谅解。
 
-* 部分文档由于Zed editor的agent prompt原因，会使用英文。
+* 部分文档由于Zed editor及后续更换工具后使用的agent prompt原因，会使用英文。
 
 ## 运行
 
@@ -52,7 +52,10 @@ python main.py --gp-name 大奖赛名称
   - [x] 进站模拟 | Pit stop simulations
   - [x] 发车模拟 | Grid and start simulations
   - [x] 斗车、超车、DRS模拟 | Simulations of car battling, overtaking, and DRS usage
-  - [ ] 事故、红黄旗、（虚拟）安全车模拟 | Simulations of accidents, red/yellow flags, and (V)SC
+  - [x] 事故、红黄旗、（虚拟）安全车模拟 | Simulations of accidents, red/yellow flags, and (V)SC
+  - [ ] 天气系统 | Weathering system
+  - [x] 蓝旗（套圈）处理 | Simulation of lapping (blue flags)
+  - [ ] 违规与处罚 | Penalties
 - [ ] 赛后内容 | After-race info
   - [ ] 赛事记录文档（含骰点）导出方法 | Exports of race records (including dice rolls)
   - [ ] 积分榜 | Leaderboards

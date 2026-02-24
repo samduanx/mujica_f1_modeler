@@ -213,16 +213,65 @@ class TimeIntervalOvertakeSystem:
         drivers_in_range: int = 1,
         attacker_name: str = "Unknown",
         defender_name: str = "Unknown",
+        sector_flag_manager=None,
+        current_sector: int = 1,
+        safety_response_manager=None,
+        blue_flag_manager=None,
     ) -> Tuple[bool, str, Dict]:
         """
         Determine if an overtake should occur.
 
         Args:
             Same as get_overtake_probability plus driver names for logging
+            sector_flag_manager: Optional SectorFlagManager to check for yellow flags
+            current_sector: Current sector number (1-3)
+            safety_response_manager: Optional SafetyResponseManager (VSC/SC)
+            blue_flag_manager: Optional BlueFlagManager to check for lapping situations
 
         Returns:
             Tuple of (should_overtake, reason, debug_info)
         """
+        # Check for lapping situation (blue flags)
+        if blue_flag_manager is not None:
+            is_lapping = blue_flag_manager.is_lapping_situation(
+                attacker_name, defender_name
+            )
+            if is_lapping:
+                debug_info = {
+                    "is_lapping_situation": True,
+                    "attacker": attacker_name,
+                    "defender": defender_name,
+                }
+                return (
+                    True,
+                    f"Lapping situation - {attacker_name} lapping {defender_name}",
+                    debug_info,
+                )
+
+        # Check for VSC/SC - no overtaking under VSC or SC
+        if safety_response_manager is not None and safety_response_manager.is_active:
+            response_type = safety_response_manager.current_response.value
+            debug_info = {
+                "blocked_by_safety_car": True,
+                "response_type": response_type,
+            }
+            return False, f"Overtake blocked - {response_type} active", debug_info
+
+        # Check for yellow flags - no overtaking under yellow
+        if sector_flag_manager is not None:
+            if not sector_flag_manager.can_overtake(current_sector):
+                flag_state = sector_flag_manager.get_flag_state(current_sector)
+                debug_info = {
+                    "blocked_by_flag": True,
+                    "flag_state": flag_state.value,
+                    "sector": current_sector,
+                }
+                return (
+                    False,
+                    f"Overtake blocked - {flag_state.value} flag in sector {current_sector}",
+                    debug_info,
+                )
+
         prob = self.get_overtake_probability(
             current_time,
             lap,
@@ -243,6 +292,7 @@ class TimeIntervalOvertakeSystem:
             "consecutive_mod": self._get_consecutive_penalty(current_time),
             "density_mod": self._get_density_modifier(drivers_in_range),
             "final_prob": prob,
+            "sector": current_sector,
         }
 
         if random.random() < prob:
@@ -253,6 +303,30 @@ class TimeIntervalOvertakeSystem:
         else:
             reason = f"Probability {prob:.4f} did not trigger"
             return False, reason, debug_info
+
+    def check_sector_flag(
+        self,
+        sector_flag_manager,
+        current_sector: int,
+    ) -> Tuple[bool, str]:
+        """
+        Check if overtaking is allowed in current sector.
+
+        Args:
+            sector_flag_manager: SectorFlagManager instance
+            current_sector: Current sector number
+
+        Returns:
+            Tuple of (can_overtake, reason)
+        """
+        if sector_flag_manager is None:
+            return True, "No flag manager"
+
+        if sector_flag_manager.can_overtake(current_sector):
+            return True, "Green flag"
+        else:
+            flag_state = sector_flag_manager.get_flag_state(current_sector)
+            return False, f"{flag_state.value} flag in sector {current_sector}"
 
     def record_overtake(
         self,
