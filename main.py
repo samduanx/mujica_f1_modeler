@@ -1,11 +1,11 @@
 import sys
-import long_dist_sim_with_box as lds
+import src.simulation.enhanced_long_dist_sim as elds
 
 
 def main(argv=None):
     """Entry point forwarding CLI arguments to the simulation."""
 
-    lds.main(argv)
+    elds.main(argv)
 
 
 if __name__ == "__main__":

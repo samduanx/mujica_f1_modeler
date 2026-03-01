@@ -1,0 +1,29 @@
+Track,C(M),C(A),C(P),Source
+Bahrain,1.0,1.05,1.05,fastf1
+Saudi Arabia,1.0,1.05,1.1,fastf1
+Australia,1.0,1.05,1.1,fastf1
+Italy (Imola),1.0,1.05,1.05,fastf1
+Miami,1.1,1.075,1.0,historical
+Spain,1.1,1.025,1.0,reference
+Monaco,1.0,1.0,1.0,fastf1
+Canada,1.1,1.05,1.05,fastf1
+Azerbaijan,1.0,1.05,1.0,historical
+UK,1.0,1.025,1.1,fastf1
+Austria,1.0,1.05,1.05,fastf1
+France,1.0,1.05,1.05,fastf1
+Hungary,1.15,1.075,1.05,fastf1
+Belgium,1.0,1.05,1.1,fastf1
+Netherlands,1.1,1.05,1.0,historical
+Italy (Monza),1.0,1.1,1.1,fastf1
+Italy,1.0,1.1,1.1,fastf1
+Monza,1.0,1.1,1.1,fastf1
+China,1.0,1.05,1.0,historical
+Singapore,1.15,1.0,1.0,fastf1
+Japan,1.05,1.025,1.1,fastf1
+USA,1.05,1.05,1.05,fastf1
+United States,1.05,1.05,1.05,fastf1
+Mexico,1.15,1.075,1.0,historical
+Brazil,1.1,1.075,1.0,historical
+Abu Dhabi,1.0,1.05,1.05,fastf1
+Qatar,1.05,1.05,1.1,fastf1
+United Kingdom,1.0,1.025,1.1,fastf1

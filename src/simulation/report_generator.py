@@ -5,7 +5,7 @@ Generates comprehensive markdown reports from race simulation results.
 Reads race results CSV and dice rolls CSV to create detailed analysis.
 
 Usage:
-    python -m simulation.report_generator --track-name Monaco --year 2024 --output-dir outputs/enhanced_sim/Monaco_2024-02-23_19-53-14
+    python -m simulation.report_generator --track-name Monaco --output-dir outputs/enhanced_sim/Monaco_2024-02-23_19-53-14
 """
 
 import argparse
@@ -420,11 +420,11 @@ def generate_fault_degradation_summary(race_results: List[Dict]) -> str:
     return "\n".join(lines)
 
 
-def generate_track_info(track_name: str, year: int) -> str:
+def generate_track_info(track_name: str) -> str:
     """Generate track information header."""
     lines = ["# F1 Race Simulation Report\n"]
     lines.append(f"**Track:** {track_name}")
-    lines.append(f"**Year:** {year}")
+    lines.append(f"**Data Source:** Parallel World (outputs/tables/)")
     lines.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     lines.append("")
     return "\n".join(lines)
@@ -434,7 +434,6 @@ def generate_report(
     race_results_path: str,
     dice_rolls_path: str,
     track_name: str,
-    year: int,
     output_path: Optional[str] = None,
 ) -> str:
     """
@@ -444,7 +443,6 @@ def generate_report(
         race_results_path: Path to race results CSV
         dice_rolls_path: Path to dice rolls CSV
         track_name: Name of the track
-        year: Race year
         output_path: Optional output path for the report
 
     Returns:
@@ -458,7 +456,7 @@ def generate_report(
     report_sections = []
 
     # Header
-    report_sections.append(generate_track_info(track_name, year))
+    report_sections.append(generate_track_info(track_name))
 
     # Race summary
     report_sections.append(generate_race_summary(race_results))
@@ -502,9 +500,6 @@ def main(argv=None):
     parser.add_argument(
         "--track-name", default="Monaco", help="Track name (default: Monaco)"
     )
-    parser.add_argument(
-        "--year", type=int, default=2024, help="Race year (default: 2024)"
-    )
     parser.add_argument("--output-dir", help="Output directory containing CSV files")
     parser.add_argument(
         "--race-results", help="Path to race results CSV (overrides output-dir)"
@@ -523,10 +518,10 @@ def main(argv=None):
     elif args.output_dir:
         track_lower = args.track_name.lower()
         race_results_path = os.path.join(
-            args.output_dir, f"race_results_{track_lower}_{args.year}.csv"
+            args.output_dir, f"race_results_{track_lower}.csv"
         )
         dice_rolls_path = os.path.join(
-            args.output_dir, f"dice_rolls_{track_lower}_{args.year}.csv"
+            args.output_dir, f"dice_rolls_{track_lower}.csv"
         )
     else:
         print(
@@ -538,7 +533,7 @@ def main(argv=None):
     output_path = args.output
     if not output_path and args.output_dir:
         output_path = os.path.join(
-            args.output_dir, f"race_report_{args.track_name.lower()}_{args.year}.md"
+            args.output_dir, f"race_report_{args.track_name.lower()}.md"
         )
 
     # Generate report
@@ -546,7 +541,6 @@ def main(argv=None):
         race_results_path=race_results_path,
         dice_rolls_path=dice_rolls_path,
         track_name=args.track_name,
-        year=args.year,
         output_path=output_path,
     )
 

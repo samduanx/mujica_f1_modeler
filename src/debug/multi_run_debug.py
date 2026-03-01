@@ -41,24 +41,23 @@ warnings.filterwarnings('ignore')
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# Import simulation components
-from src.simulation.long_dist_sim_with_box import (
+# Import simulation components from enhanced simulation
+from src.simulation.enhanced_long_dist_sim import (
     simulate_race_with_pit_stops,
     read_driver_data,
     load_pit_stop_data,
     get_track_characteristics,
     DEFAULT_LAP_COUNTS,
     calculate_degradation_with_cliff,
-    get_universal_tyre_params_with_cliff,
     get_available_compounds_for_track,
     get_track_tyre_weights,
-    generate_team_tyre_compounds,
     generate_individual_tyre_sequence,
     determine_pit_strategy,
     generate_pit_laps,
     ensure_f1_tyre_compliance,
     load_pitlane_time_data,
     roll_pit_stop_time,
+    TRACK_BASE_LAP_TIMES,
 )
 
 # Import FastF1 integration

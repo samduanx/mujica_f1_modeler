@@ -43,8 +43,9 @@ python main.py --gp-name 大奖赛名称
   - [x] 轮胎差异模拟 | Tyre differention simulations
   - [x] 赛道特性构建 | Circuit characteristic modeling
   - [ ] 轮胎套数限制模型构建 | Tyre overall usage (by sets) limit modeling
-  - [ ] 车队升级机制移植 | Porting the current team/vehicle upgrades
-  - [ ] 车手技能提升机制移植 | Porting the current driver upgrades
+  - [x] DR, PR计算系统 | Calculation system of DR and PR parameters
+    - [ ] 车队升级机制移植 | Porting the current team/vehicle upgrades
+    - [ ] 车手技能提升机制移植 | Porting the current driver upgrades
 - [ ] 自由练习 | Free Practice sessions
 - [ ] 排位赛（含冲刺排位） | Qualifying sessions (incl. Sprint Qualifiers)
 - [ ] 冲刺赛 | Sprint sessions
@@ -53,15 +54,26 @@ python main.py --gp-name 大奖赛名称
   - [x] 发车模拟 | Grid and start simulations
   - [x] 斗车、超车、DRS模拟 | Simulations of car battling, overtaking, and DRS usage
   - [x] 事故、红黄旗、（虚拟）安全车模拟 | Simulations of accidents, red/yellow flags, and (V)SC
+  - [ ] 违规与处罚 | Penalties
   - [ ] 天气系统 | Weathering system
   - [x] 蓝旗（套圈）处理 | Simulation of lapping (blue flags)
-  - [ ] 违规与处罚 | Penalties
 - [ ] 赛后内容 | After-race info
-  - [ ] 赛事记录文档（含骰点）导出方法 | Exports of race records (including dice rolls)
+  - [x] 赛事记录文档（含骰点）导出方法 | Exports of race records (including dice rolls)
   - [ ] 积分榜 | Leaderboards
   - [ ] 罚分处理 | Penalty processing and point calculations
   - [ ] 预算帽计算方法移植 | Porting the cost cap system
   - [ ] 套件更换与处罚计算 | Modeling of sanctioned part replacements and related penalties
+
+---
+
+## Changelog | 更新日志
+
+### v2.x Breaking Changes (2025+)
+
+- **Output filename format changed**: Race result files now use `{track}.csv` instead of `{track}_{year}.csv`
+  - Old: `race_results_spain_2024.csv`
+  - New: `race_results_spain.csv`
+  - `--year` CLI parameter removed from simulation scripts
 
 ---
 

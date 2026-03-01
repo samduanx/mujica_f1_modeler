@@ -1,0 +1,178 @@
+[
+  {
+    "track": "bahrain",
+    "year": 2024,
+    "downforce_level": 3,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Based on track_coefficients_explanation.md - Medium downforce"
+  },
+  {
+    "track": "saudi-arabia",
+    "year": 2024,
+    "downforce_level": 3,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Fast street circuit - medium downforce"
+  },
+  {
+    "track": "japan",
+    "year": 2024,
+    "downforce_level": 4,
+    "brake_severity": 2,
+    "url": "manual_reference",
+    "note": "High downforce track (Suzuka)"
+  },
+  {
+    "track": "china",
+    "year": 2024,
+    "downforce_level": 3,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Medium downforce (Shanghai)"
+  },
+  {
+    "track": "miami",
+    "year": 2024,
+    "downforce_level": 2,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Lower downforce (street circuit with slow sections)"
+  },
+  {
+    "track": "monaco",
+    "year": 2024,
+    "downforce_level": 5,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Highest downforce - slow street circuit"
+  },
+  {
+    "track": "canada",
+    "year": 2024,
+    "downforce_level": 2,
+    "brake_severity": 4,
+    "url": "manual_reference",
+    "note": "Street circuit with heavy braking"
+  },
+  {
+    "track": "spain",
+    "year": 2024,
+    "downforce_level": 3,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Reference track - medium downforce"
+  },
+  {
+    "track": "austria",
+    "year": 2024,
+    "downforce_level": 3,
+    "brake_severity": 2,
+    "url": "manual_reference",
+    "note": "Medium-high speed"
+  },
+  {
+    "track": "uk",
+    "year": 2024,
+    "downforce_level": 4,
+    "brake_severity": 2,
+    "url": "manual_reference",
+    "note": "High downforce (Silverstone)"
+  },
+  {
+    "track": "hungary",
+    "year": 2024,
+    "downforce_level": 2,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Technical track - lower downforce"
+  },
+  {
+    "track": "belgium",
+    "year": 2024,
+    "downforce_level": 3,
+    "brake_severity": 2,
+    "url": "manual_reference",
+    "note": "High speed - medium downforce"
+  },
+  {
+    "track": "netherlands",
+    "year": 2024,
+    "downforce_level": 3,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Medium downforce"
+  },
+  {
+    "track": "italy",
+    "year": 2024,
+    "downforce_level": 1,
+    "brake_severity": 1,
+    "url": "manual_reference",
+    "note": "Monza - lowest downforce"
+  },
+  {
+    "track": "azerbaijan",
+    "year": 2024,
+    "downforce_level": 3,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Fast street circuit"
+  },
+  {
+    "track": "singapore",
+    "year": 2024,
+    "downforce_level": 5,
+    "brake_severity": 4,
+    "url": "manual_reference",
+    "note": "Highest downforce - slow street circuit"
+  },
+  {
+    "track": "usa",
+    "year": 2024,
+    "downforce_level": 3,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Mixed layout - medium downforce"
+  },
+  {
+    "track": "mexico",
+    "year": 2024,
+    "downforce_level": 2,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "High altitude - lower downforce"
+  },
+  {
+    "track": "brazil",
+    "year": 2024,
+    "downforce_level": 2,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Mixed layout"
+  },
+  {
+    "track": "qatar",
+    "year": 2024,
+    "downforce_level": 3,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Medium downforce"
+  },
+  {
+    "track": "abu-dhabi",
+    "year": 2024,
+    "downforce_level": 3,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Medium downforce"
+  },
+  {
+    "track": "las-vegas",
+    "year": 2024,
+    "downforce_level": 3,
+    "brake_severity": 3,
+    "url": "manual_reference",
+    "note": "Fast street circuit"
+  }
+]

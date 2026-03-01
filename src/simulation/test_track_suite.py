@@ -107,28 +107,42 @@ os.makedirs(RACE_REPORTS_DIR, exist_ok=True)
 # =============================================================================
 
 # Default driver/team data for generating CSV files
+# Matches docs/spain_ratings.csv reference file
 DEFAULT_DRIVER_DATA = [
+    # Red Bull
     ("Verstappen", "Red Bull", 100.5, 308.34, 309.89),
+    ("Perez", "Red Bull", 99.925, 308.34, 308.11),
+    # Mercedes
     ("Hamilton", "Mercedes", 100.4, 308.00, 309.23),
+    ("Russell", "Mercedes", 100.0, 308.00, 308.00),
+    # Ferrari
     ("Leclerc", "Ferrari", 100.4, 307.71, 308.94),
-    ("Russell", "Mercedes", 99.95, 308.00, 308.04),
-    ("Perez", "Red Bull", 99.9, 308.34, 308.04),
-    ("Sainz", "Ferrari", 99.9, 308.34, 308.04),
-    ("Norris", "McLaren", 100.1, 289.54, 289.14),
-    ("Piastri", "McLaren", 99.85, 293.98, 294.67),
-    ("Russell", "Mercedes", 99.6, 289.54, 289.94),
-    ("Alonso", "Alpine", 99.6, 289.54, 289.94),
-    ("Gasly", "Alpine", 100.1, 299.54, 299.84),
-    ("Ocon", "Alpine", 99.85, 296.16, 297.72),
-    ("Stroll", "Aston Martin", 99.65, 296.58, 296.54),
+    ("Sainz", "Ferrari", 99.95, 307.71, 307.55),
+    # AlphaTauri
+    ("Gasly", "AlphaTauri", 100.1, 299.54, 299.84),
+    ("Tsunoda", "AlphaTauri", 99.85, 299.54, 299.09),
+    # Alpine
+    ("Alonso", "Alpine", 100.5, 296.16, 297.64),
+    ("Ocon", "Alpine", 99.85, 296.16, 295.72),
+    # Aston Martin
     ("Vettel", "Aston Martin", 100.3, 296.58, 297.46),
+    ("Stroll", "Aston Martin", 99.7, 296.58, 295.69),
+    # Andretti
+    ("Grosjean", "Andretti", 100.1, 294.55, 294.84),
+    ("Schwartzman", "Andretti", 99.6, 294.55, 293.37),
+    # McLaren
+    ("Norris", "McLaren", 100.1, 294.38, 294.67),
+    ("Piastri", "McLaren", 99.875, 294.38, 294.01),
+    # Alfa Romeo
     ("Bottas", "Alfa Romeo", 100.2, 293.98, 294.57),
-    ("Zhou", "Alfa Romeo", 99.6, 293.98, 292.81),
-    ("Magnussen", "Haas", 100.1, 280.03, 280.32),
-    ("Schumacher", "Haas", 99.65, 280.03, 279.01),
-    ("Albon", "Williams", 100.1, 279.55, 279.84),
-    ("Latifi", "Williams", 99.6, 279.55, 278.39),
-]
+    ("Zhou", "Alfa Romeo", 99.65, 293.98, 292.95),
+    # Haas
+    ("Magnussen", "Haas", 100.1, 290.03, 290.32),
+    ("Schumacher", "Haas", 99.675, 290.03, 289.08),
+    # Williams
+    ("Albon", "Williams", 100.1, 289.55, 289.84),
+    ("Latifi", "Williams", 99.625, 289.55, 288.46),
+]  # 22 drivers total - matches reference file docs/spain_ratings.csv
 
 
 def create_driver_csv(track_name: str, output_dir: str = "outputs/tables") -> str:
@@ -365,8 +379,6 @@ def run_track_simulation(
         argv = [
             "--gp-name",
             gp_name,  # Use gp_name for the simulation
-            "--year",
-            str(year),
             "--seed",
             str(seed),
             "--csv-file",

@@ -10,7 +10,7 @@ This simulation integrates:
 - Driver personality model
 
 Usage:
-    uv run python src/simulation/enhanced_long_dist_sim.py --gp-name Spain --year 2024
+    uv run python src/simulation/enhanced_long_dist_sim.py --gp-name Spain
 """
 
 import argparse
@@ -76,29 +76,408 @@ from drs.driver_state import DriverRaceState
 from drs.base_config import TrackDRSConfig, DRSZone
 from drs.zones import TRACKS as DRS_TRACKS
 
-# Import existing simulation utilities
-from simulation.long_dist_sim_with_box import (
-    read_driver_data,
-    load_pit_stop_data,
-    load_pitlane_time_data,
-    get_track_characteristics,
-    assign_team_strategies,
-    generate_pit_laps,
-    generate_individual_tyre_sequence,
-    determine_pit_strategy,
-    roll_tyre_for_track,
-    get_available_compounds_for_track,
-    smart_tyre_selection,
-    ensure_f1_tyre_compliance,
-    calculate_start_lap_delta,
-    calculate_base_lap_time,
-    calculate_degradation_with_cliff,
-    calculate_dr_based_std,
-    roll_pit_stop_time,
-    TRACK_BASE_LAP_TIMES,
-    DEFAULT_LAP_COUNTS,
-    build_arg_parser,
-)
+# =============================================================================
+# STUB IMPLEMENTATIONS FOR MIGRATED FUNCTIONS
+# These were previously in long_dist_sim_with_box.py
+# =============================================================================
+
+import csv
+import json
+from pathlib import Path
+
+# Track base lap times (seconds)
+TRACK_BASE_LAP_TIMES = {
+    "spain": (89.0, 300),
+    "monaco": (76.0, 300),
+    "monza": (84.0, 300),
+    "bahrain": (91.0, 300),
+    "australia": (86.0, 300),
+    "japan": (91.0, 300),
+    "china": (87.0, 300),
+    "united states": (94.0, 300),
+    "mexico": (84.0, 300),
+    "brazil": (74.0, 300),
+    "singapore": (88.0, 300),
+    "abu dhabi": (90.0, 300),
+    "canada": (80.0, 300),
+    "silverstone": (88.0, 300),
+    "hungary": (80.0, 300),
+    "belgium": (102.0, 300),
+    "netherlands": (74.0, 300),
+    "italy": (84.0, 300),
+    "austria": (68.0, 300),
+    "france": (91.0, 300),
+    "azerbaijan": (88.0, 300),
+}
+
+# Default lap counts per track
+DEFAULT_LAP_COUNTS = {
+    "spain": 66,
+    "monaco": 78,
+    "monza": 53,
+    "bahrain": 57,
+    "australia": 58,
+    "japan": 53,
+    "china": 56,
+    "united states": 56,
+    "mexico": 71,
+    "brazil": 71,
+    "singapore": 61,
+    "abu dhabi": 58,
+    "canada": 70,
+    "silverstone": 52,
+    "hungary": 70,
+    "belgium": 44,
+    "netherlands": 72,
+    "italy": 53,
+    "austria": 71,
+    "france": 53,
+    "azerbaijan": 51,
+}
+
+# Tyre compounds for 2022 season
+TYRE_COMPOUNDS_2022 = ["SOFT", "MEDIUM", "HARD"]
+
+# Track aliases for different naming conventions
+TRACK_ALIASES = {
+    "united states": ["usa", "austin", "us"],
+    "united kingdom": ["silverstone", "great britain", "britain"],
+    "italy": ["monza"],
+}
+
+
+def read_driver_data(csv_file: str) -> dict:
+    """Read driver data from CSV file."""
+    driver_data = {}
+    try:
+        with open(csv_file, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                driver_name = row.get("Driver", "")
+                if driver_name:
+                    driver_data[driver_name] = {
+                        "Team": row.get("Team", ""),
+                        "R_Value": float(row.get("R_Value", 300)),
+                        "DR_Value": float(row.get("DR_Value", 0)),
+                    }
+    except FileNotFoundError:
+        print(f"Warning: Driver data file not found: {csv_file}")
+    return driver_data
+
+
+def load_pit_stop_data() -> dict:
+    """Load pit stop data from CSV."""
+    pit_data = {}
+    try:
+        with open("docs/pit_stop_strategies_2022_2024.csv", "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                track = row.get("Track", "").lower()
+                pit_data[track] = {
+                    "strategy_1_stop": row.get("Strategy_1_Stop", "HARD-MEDIUM"),
+                    "strategy_2_stop": row.get("Strategy_2_Stop", "HARD-MEDIUM-SOFT"),
+                }
+    except FileNotFoundError:
+        print("Warning: Pit stop data file not found, using defaults")
+    return pit_data
+
+
+def load_pitlane_time_data():
+    """Load pitlane time data."""
+    import pandas as pd
+
+    # Try new location in docs first, then fall back to legacy location
+    for filepath in ["docs/pitlane_time.csv", "outputs/tables/pitlane_time.csv"]:
+        try:
+            df = pd.read_csv(filepath)
+            return df
+        except FileNotFoundError:
+            continue
+    print("Warning: pitlane_time.csv not found, using default values")
+    return None
+
+
+def get_track_characteristics() -> dict:
+    """Get track characteristics data."""
+    return {
+        "spain": {"abrasion": 0.8, "grip": 0.7},
+        "monaco": {"abrasion": 0.4, "grip": 0.9},
+        "monza": {"abrasion": 0.5, "grip": 0.6},
+    }
+
+
+def assign_team_strategies(
+    driver_data: dict, gp_name: str, num_laps: int, pit_data: dict
+) -> tuple:
+    """Assign team strategies."""
+    team_strategies = {}
+    driver_teams = {}
+    for driver, info in driver_data.items():
+        team = info.get("Team", "")
+        driver_teams[driver] = team
+        if team not in team_strategies:
+            team_strategies[team] = {
+                "strategy": 1,
+                " tyre_compounds_set": ["HARD", "MEDIUM"],
+            }
+    return team_strategies, driver_teams
+
+
+def generate_pit_laps(track_name: str, strategy: int, pit_data: dict) -> list:
+    """Generate pit stop laps based on strategy."""
+    track = track_name.lower()
+    num_laps = DEFAULT_LAP_COUNTS.get(track, 66)
+    num_stops = strategy
+    if num_stops == 1:
+        return [int(num_laps * 0.6)]
+    elif num_stops == 2:
+        return [int(num_laps * 0.35), int(num_laps * 0.7)]
+    return [int(num_laps * 0.3), int(num_laps * 0.55), int(num_laps * 0.8)]
+
+
+def generate_individual_tyre_sequence(compounds: list) -> list:
+    """Generate individual tyre sequence."""
+    return compounds if compounds else ["HARD", "MEDIUM"]
+
+
+def determine_pit_strategy(track_name: str, pit_data: dict) -> int:
+    """Determine pit strategy (number of stops)."""
+    return 1
+
+
+def roll_tyre_for_track(track_name: str) -> str:
+    """Roll random tyre compound for track."""
+    return "MEDIUM"
+
+
+def get_available_compounds_for_track(track_name: str) -> list:
+    """Get available tyre compounds for track."""
+    return ["SOFT", "MEDIUM", "HARD"]
+
+
+def get_race_tyre_for_track(track_name: str) -> str:
+    """Get race tyre for track (typically medium or hard)."""
+    return "MEDIUM"
+
+
+def get_track_tyre_weights(track_name: str) -> dict:
+    """Get tyre weight preferences for track."""
+    return {"SOFT": 0.2, "MEDIUM": 0.5, "HARD": 0.3}
+
+
+def smart_tyre_selection(track_name: str, lap_count: int) -> str:
+    """Smart tyre selection based on lap count."""
+    if lap_count < 20:
+        return "SOFT"
+    elif lap_count < 40:
+        return "MEDIUM"
+    return "HARD"
+
+
+def ensure_f1_tyre_compliance(compound: str) -> str:
+    """Ensure tyre compound is F1 compliant."""
+    compound = compound.upper()
+    if compound in ["SOFT", "MEDIUM", "HARD"]:
+        return compound
+    return "MEDIUM"
+
+
+def calculate_start_lap_delta(
+    grid_position: int,
+    driver: str = None,
+    r_value: float = None,
+    track_name: str = None,
+    track_chars: dict = None,
+) -> tuple:
+    """Calculate start lap delta based on grid position."""
+    base_delta = grid_position * 0.15
+    return base_delta, 0.5
+
+
+def calculate_base_lap_time(r_value: float, track_name: str) -> float:
+    """Calculate base lap time based on R value and track."""
+    base_time = TRACK_BASE_LAP_TIMES.get(track_name.lower(), (88.0, 300))[0]
+    adjustment = (r_value - 300) * 0.01
+    return base_time + adjustment
+
+
+def calculate_degradation_with_cliff(
+    lap_number: int,
+    tyre_compound: str,
+    r_value: float,
+    r_max: float,
+    track_chars: dict,
+    pit_lap_count: int,
+) -> float:
+    """Calculate tire degradation with cliff effect."""
+    tyre_params = get_universal_tyre_params_with_cliff()
+    compound_params = tyre_params.get(tyre_compound, tyre_params["MEDIUM"])
+
+    # Non-linear scaling
+    scaled_lap = nonlinear_scaling(r_value, compound_params["base_lap"], r_max)
+
+    # Track characteristics compensation
+    abrasion = track_chars.get("abrasion", 5) if isinstance(track_chars, dict) else 5
+    wear_factor = calculate_wear_compensation(abrasion)
+
+    # Base degradation rate
+    base_degradation = compound_params["base_degradation"] * wear_factor
+
+    # Cliff effect
+    cliff_lap = compound_params["cliff_lap"]
+    cliff_severity = compound_params["cliff_severity"]
+
+    if lap_number > cliff_lap:
+        cliff_factor = 1 + cliff_severity * ((lap_number - cliff_lap) / cliff_lap)
+    else:
+        cliff_factor = 1.0
+
+    # Calculate cumulative degradation
+    degradation = base_degradation * (lap_number / scaled_lap) * cliff_factor
+
+    return degradation
+
+
+def calculate_dr_based_std(
+    dr_value: float, dr_min: float, dr_max: float, base_std: float = 0.45
+) -> float:
+    """Calculate DR-based standard deviation."""
+    if dr_max == dr_min:
+        return base_std
+    dr_normalized = (dr_value - dr_min) / (dr_max - dr_min)
+    return base_std * (1.0 - dr_normalized * 0.3)
+
+
+def nonlinear_scaling(r_value: float, base_lap: float, r_max: float) -> float:
+    """Non-linear scaling function."""
+    return base_lap * (
+        1 + 0.65 * (1 - r_value / r_max) * np.exp(-2.5 * (1 - r_value / r_max))
+    )
+
+
+def calculate_wear_compensation(abrasion_level: float) -> float:
+    """Calculate compensation factor based on track wear level."""
+    normalized_abrasion = (abrasion_level - 3) / 2.0
+    wear_factor = 1 + 0.2 * normalized_abrasion
+    return wear_factor
+
+
+def roll_pit_stop_time() -> float:
+    """Roll random pit stop time."""
+    return 22.0
+
+
+def build_arg_parser():
+    """Build argument parser for CLI."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Enhanced F1 Race Simulation")
+    parser.add_argument("--gp-name", type=str, default="Spain", help="Grand Prix name")
+    parser.add_argument("--year", type=int, default=2022, help="Season year")
+    parser.add_argument("--laps", type=int, default=None, help="Number of laps")
+    return parser
+
+
+def generate_team_tyre_compounds(track_name: str, strategy: int) -> list:
+    """Generate tyre compounds for a team's strategy."""
+    if strategy == 1:
+        return ["HARD", "MEDIUM"]
+    elif strategy == 2:
+        return ["HARD", "MEDIUM", "SOFT"]
+    return ["HARD", "MEDIUM", "HARD"]
+
+
+def get_universal_tyre_params_with_cliff():
+    """Get tire parameters based on Pirelli technical documentation."""
+    return {
+        "C1": {
+            "base_lap": 30,
+            "base_degradation": 0.025,
+            "cliff_lap": 28,
+            "cliff_severity": 0.15,
+        },
+        "C2": {
+            "base_lap": 25,
+            "base_degradation": 0.030,
+            "cliff_lap": 23,
+            "cliff_severity": 0.12,
+        },
+        "C3": {
+            "base_lap": 20,
+            "base_degradation": 0.035,
+            "cliff_lap": 18,
+            "cliff_severity": 0.10,
+        },
+        "C4": {
+            "base_lap": 15,
+            "base_degradation": 0.045,
+            "cliff_lap": 13,
+            "cliff_severity": 0.08,
+        },
+        "C5": {
+            "base_lap": 12,
+            "base_degradation": 0.060,
+            "cliff_lap": 10,
+            "cliff_severity": 0.06,
+        },
+        # Also support compound names
+        "SOFT": {
+            "base_lap": 15,
+            "base_degradation": 0.045,
+            "cliff_lap": 13,
+            "cliff_severity": 0.08,
+        },
+        "MEDIUM": {
+            "base_lap": 20,
+            "base_degradation": 0.035,
+            "cliff_lap": 18,
+            "cliff_severity": 0.10,
+        },
+        "HARD": {
+            "base_lap": 25,
+            "base_degradation": 0.030,
+            "cliff_lap": 23,
+            "cliff_severity": 0.12,
+        },
+    }
+
+
+def get_track_base_lap(track_name: str) -> float:
+    """Get base lap time for a track."""
+    return TRACK_BASE_LAP_TIMES.get(track_name.lower(), (88.0, 300))[0]
+
+
+def simulate_race_with_pit_stops(
+    track_name: str,
+    year: int,
+    num_laps: int,
+    driver_data: dict,
+    pit_data: dict,
+    team_strategies: dict = None,
+    random_seed: int = None,
+) -> dict:
+    """
+    Simulate a race with pit stops - wrapper for EnhancedRaceSimulator.
+
+    This is a compatibility function that wraps the enhanced RaceSimulator.
+    """
+    if random_seed is not None:
+        import random
+
+        random.seed(random_seed)
+
+    # Create simulator
+    sim = EnhancedRaceSimulator(
+        track_name=track_name,
+        year=year,
+        num_laps=num_laps,
+        driver_data=driver_data,
+    )
+
+    # Run simulation
+    results = sim.run()
+
+    return results
 
 
 # =============================================================================
@@ -106,6 +485,53 @@ from simulation.long_dist_sim_with_box import (
 # =============================================================================
 
 OUTPUT_BASE_DIR = os.path.join("outputs", "enhanced_sim")
+
+# =============================================================================
+# ANDRETTI TEAM CONFIGURATION
+# =============================================================================
+# Andretti team participates in these Grand Prix (22 drivers total):
+ANDRETTI_GP_ATTENDANCE = [
+    "miami",  # Miami GP
+    "spain",  # Spain GP
+    "canada",  # Canada GP
+    "hungary",  # Hungary GP
+    "italy",  # Italy (Monza)
+    "monza",  # Monza (alias for Italy)
+    "singapore",  # Singapore GP
+    "united states",  # US (Austin)
+    "united_states",  # US (Austin) - alternative key
+    "austin",  # US (Austin) - alternative key
+    "mexico",  # Mexico GP
+    "brazil",  # Brazil GP
+]
+
+
+def is_andretti_participating(gp_name: str) -> bool:
+    """Check if Andretti team participates in the given GP."""
+    gp_lower = gp_name.lower().strip()
+    return gp_lower in ANDRETTI_GP_ATTENDANCE
+
+
+def filter_andretti_drivers(
+    driver_data: Dict[str, Dict], gp_name: str
+) -> Dict[str, Dict]:
+    """
+    Filter out Andretti drivers if they don't participate in this GP.
+
+    Returns a new driver_data dict with Andretti drivers removed if not attending.
+    """
+    if is_andretti_participating(gp_name):
+        # Andretti participates - return all drivers
+        return driver_data
+
+    # Filter out Andretti drivers
+    filtered_data = {}
+    for driver_name, driver_info in driver_data.items():
+        team = driver_info.get("Team", "")
+        if team != "Andretti":
+            filtered_data[driver_name] = driver_info
+
+    return filtered_data
 
 
 def get_race_output_dir(track_name: str, runtime_datetime: datetime) -> str:
@@ -116,9 +542,9 @@ def get_race_output_dir(track_name: str, runtime_datetime: datetime) -> str:
     Example: Monaco_2024-02-23_19-53-14
 
     The folder will contain:
-    - race_results_{track}_{year}.csv
-    - dice_rolls_{track}_{year}.csv
-    - race_results_{track}_{year}_report.md
+    - race_results_{track}.csv
+    - dice_rolls_{track}.csv
+    - race_report_{track}.md
     """
     # Format datetime for folder name: YYYY-MM-DD_HH-MM-SS
     datetime_str = runtime_datetime.strftime("%Y-%m-%d_%H-%M-%S")
@@ -131,14 +557,13 @@ def get_race_output_dir(track_name: str, runtime_datetime: datetime) -> str:
 def save_dice_rolls(
     dice_logger: "DiceRollingLogger",
     track_name: str,
-    year: int,
     output_dir: str,
 ):
     """Save dice rolls to CSV in the specified output directory."""
     if not dice_logger.rolls:
         return
 
-    filename = f"dice_rolls_{track_name.lower()}_{year}.csv"
+    filename = f"dice_rolls_{track_name.lower()}.csv"
     filepath = os.path.join(output_dir, filename)
 
     df = pd.DataFrame(dice_logger.rolls)
@@ -160,9 +585,8 @@ fastf1.set_log_level("ERROR")
 class DiceRollingLogger:
     """Records all dice rolling results to CSV files."""
 
-    def __init__(self, track_name: str, year: int):
+    def __init__(self, track_name: str):
         self.track_name = track_name
-        self.year = year
         self.rolls: List[Dict[str, Any]] = []
 
     def log_roll(
@@ -173,11 +597,12 @@ class DiceRollingLogger:
         dice_type: str,
         dice_result: int,
         outcome: str,
+        race_time: float = 0.0,
         details: Optional[Dict] = None,
     ):
         """Log a dice roll result."""
         roll_record = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": f"{race_time:.3f}s",
             "lap": lap,
             "driver": driver,
             "incident_type": incident_type,
@@ -198,7 +623,7 @@ class DiceRollingLogger:
         if output_dir is None:
             output_dir = OUTPUT_BASE_DIR
 
-        filename = f"dice_rolls_{self.track_name.lower()}_{self.year}.csv"
+        filename = f"dice_rolls_{self.track_name.lower()}.csv"
         filepath = os.path.join(output_dir, filename)
 
         df = pd.DataFrame(self.rolls)
@@ -727,7 +1152,6 @@ class EnhancedRaceSimulator:
     def __init__(
         self,
         track_name: str,
-        year: int,
         num_laps: int,
         driver_data: Dict[str, Dict],
         team_stabilities: Dict[str, TeamStability],
@@ -738,7 +1162,6 @@ class EnhancedRaceSimulator:
         random_seed: Optional[int] = None,
     ):
         self.track_name = track_name
-        self.year = year
         self.num_laps = num_laps
         self.driver_data = driver_data
         self.team_stabilities = team_stabilities
@@ -787,6 +1210,13 @@ class EnhancedRaceSimulator:
         # Pit stop data
         self.pitlane_data = load_pitlane_time_data()
 
+        # Track simulation start time for relative timestamps
+        self.simulation_start_time: Optional[datetime] = None
+
+        # Vehicle fault check scheduling - dice roll determines next check lap
+        # Initial check at lap 3, then dice determines next check interval
+        self._next_vehicle_fault_check_lap: int = 3
+
     def _get_drs_config(self, track_name: str) -> Optional[TrackDRSConfig]:
         """Get DRS configuration for the track."""
         # Try to get track config from DRS zones
@@ -794,6 +1224,26 @@ class EnhancedRaceSimulator:
         if track_getter:
             return track_getter()
         return None
+
+    def get_relative_time(self) -> float:
+        """Get estimated race time in seconds (time into the race)."""
+        # Use cumulative race time if available, otherwise estimate
+        if (
+            self.race_state.cumulative_times
+            and len(self.race_state.cumulative_times) > 0
+        ):
+            # Get the minimum cumulative time (leader)
+            leader_time = min(self.race_state.cumulative_times.values())
+            if leader_time > 0:
+                return leader_time
+        # Estimate based on current lap and base lap time
+        # This is used at race start before cumulative times are populated
+        current_lap = self.race_state.current_lap
+        if current_lap > 0:
+            # Estimate: (current_lap - 1) * base_lap_time
+            # This gives approximate time at start of current lap
+            return (current_lap - 1) * self.base_lap_time
+        return 0.0
 
     def simulate_start(self, grid_positions: Dict[str, int]) -> Dict[str, float]:
         """
@@ -877,6 +1327,7 @@ class EnhancedRaceSimulator:
                     dice_type="d10",
                     dice_result=launch_roll,
                     outcome="major_mistake",
+                    race_time=self.get_relative_time(),
                     details={
                         "grid_position": grid_pos,
                         "reaction_roll": reaction_roll,
@@ -893,6 +1344,7 @@ class EnhancedRaceSimulator:
                     dice_type="d10",
                     dice_result=launch_roll,
                     outcome="wheelspin",
+                    race_time=self.get_relative_time(),
                     details={
                         "grid_position": grid_pos,
                         "reaction_roll": reaction_roll,
@@ -908,6 +1360,7 @@ class EnhancedRaceSimulator:
                     dice_type="d10",
                     dice_result=launch_roll,
                     outcome="excellent_launch",
+                    race_time=self.get_relative_time(),
                     details={
                         "grid_position": grid_pos,
                         "reaction_roll": reaction_roll,
@@ -922,6 +1375,7 @@ class EnhancedRaceSimulator:
                     dice_type="d10",
                     dice_result=reaction_roll,
                     outcome=start_outcome,
+                    race_time=self.get_relative_time(),
                     details={
                         "grid_position": grid_pos,
                         "reaction_time": round(reaction_time, 3),
@@ -963,8 +1417,8 @@ class EnhancedRaceSimulator:
             is_leading = driver_position == 1
 
             # Roll for vehicle fault (MODERN F1 - LOW PROBABILITY)
-            # Using new fault probability system
-            if team_stability:
+            # Using dice system to control check frequency
+            if team_stability and lap == self._next_vehicle_fault_check_lap:
                 fault_prob = get_fault_probability_per_lap(team_stability)
                 fault_roll = random.random()  # 0-1 float
 
@@ -975,6 +1429,7 @@ class EnhancedRaceSimulator:
                     dice_type="probability",
                     dice_result=int(fault_roll * 1000),
                     outcome="fault_occurred" if fault_roll < fault_prob else "no_fault",
+                    race_time=self.get_relative_time(),
                     details={
                         "team": team,
                         "stability": team_stability.base_stability,
@@ -1009,6 +1464,7 @@ class EnhancedRaceSimulator:
                             dice_type="d100",
                             dice_result=severity_roll,
                             outcome="dnf",
+                            race_time=self.get_relative_time(),
                             details={
                                 "team": team,
                                 "severity": severity,
@@ -1031,6 +1487,18 @@ class EnhancedRaceSimulator:
                         }
                     )
 
+                    # After a fault, schedule next check sooner (more likely to have issues)
+                    # Use d6: 1-3 laps
+                    next_check = roll_d6()
+                    self._next_vehicle_fault_check_lap = lap + next_check
+
+            # Schedule next vehicle fault check using dice if we've reached the check lap
+            # and no fault occurred this lap
+            if lap == self._next_vehicle_fault_check_lap:
+                # Use d10 to determine next check interval (1-10 laps)
+                next_check_interval = roll_d10()
+                self._next_vehicle_fault_check_lap = lap + next_check_interval
+
             # Roll for driver error using personality-based probability
             error_roll = roll_d100()
             error_threshold = calculate_driver_error_probability(
@@ -1049,6 +1517,7 @@ class EnhancedRaceSimulator:
                 outcome="no_error"
                 if error_roll > error_threshold
                 else "error_occurred",
+                race_time=self.get_relative_time(),
                 details={
                     "position": driver_position,
                     "error_threshold": round(error_threshold, 2),
@@ -1087,6 +1556,7 @@ class EnhancedRaceSimulator:
             dice_type="d10",
             dice_result=overtake_roll,
             outcome="clean_overtake" if overtake_roll <= 6 else "incident",
+            race_time=self.get_relative_time(),
             details={
                 "attacker": driver_a,
                 "defender": driver_b,
@@ -1128,6 +1598,107 @@ class EnhancedRaceSimulator:
                 "is_dnf": is_dnf,  # Flag for major accident DNF
             }
 
+        # Check for driver error on failed overtake (roll 7-8: incident but not collision)
+        if overtake_roll >= 7:
+            # Roll for driver error on failed overtake attempt
+            # This applies to both the attacker and defender
+            return self._check_driver_error_for_overtake(
+                lap, driver_a, driver_b, position_a, position_b
+            )
+
+        return None
+
+    def _check_driver_error_for_overtake(
+        self,
+        lap: int,
+        driver_a: str,
+        driver_b: str,
+        position_a: int,
+        position_b: int,
+    ) -> Optional[Dict]:
+        """
+        Check for driver error on failed overtake attempt.
+
+        When an overtake fails (roll 7-8), there's a chance the attacker
+        or defender makes a mistake trying to complete or defend the overtake.
+        """
+        # Check attacker error
+        attacker_error_roll = roll_d100()
+        attacker_info = self.driver_data.get(driver_a, {})
+        attacker_team = attacker_info.get("Team", "Unknown")
+        attacker_stability = self.team_stabilities.get(attacker_team)
+
+        attacker_error_threshold = calculate_driver_error_probability(
+            driver_a,
+            position=position_a,
+            is_fighting=True,
+            is_leading=False,
+        )
+
+        self.dice_logger.log_roll(
+            lap=lap,
+            driver=driver_a,
+            incident_type="overtake_failed_driver_error",
+            dice_type="d100",
+            dice_result=attacker_error_roll,
+            outcome="attacker_error"
+            if attacker_error_roll <= attacker_error_threshold
+            else "attacker_clean",
+            race_time=self.get_relative_time(),
+            details={
+                "overtake_type": "failed_attempt",
+                "position": position_a,
+                "error_threshold": round(attacker_error_threshold, 2),
+            },
+        )
+
+        # Check defender error
+        defender_error_roll = roll_d100()
+        defender_info = self.driver_data.get(driver_b, {})
+        defender_team = defender_info.get("Team", "Unknown")
+
+        defender_error_threshold = calculate_driver_error_probability(
+            driver_b,
+            position=position_b,
+            is_fighting=True,
+            is_leading=False,
+        )
+
+        self.dice_logger.log_roll(
+            lap=lap,
+            driver=driver_b,
+            incident_type="overtake_defend_driver_error",
+            dice_type="d100",
+            dice_result=defender_error_roll,
+            outcome="defender_error"
+            if defender_error_roll <= defender_error_threshold
+            else "defender_clean",
+            race_time=self.get_relative_time(),
+            details={
+                "overtake_type": "failed_defend",
+                "position": position_b,
+                "error_threshold": round(defender_error_threshold, 2),
+            },
+        )
+
+        # If either made an error, create an incident
+        if attacker_error_roll <= attacker_error_threshold:
+            return {
+                "type": "driver_error",
+                "lap": lap,
+                "driver": driver_a,
+                "cause": "overtake_attempt_failed",
+                "time_loss": 3.0,  # Small time loss for mistake
+            }
+        elif defender_error_roll <= defender_error_threshold:
+            return {
+                "type": "driver_error",
+                "lap": lap,
+                "driver": driver_b,
+                "cause": "overtake_defend_failed",
+                "time_loss": 3.0,
+            }
+
         return None
 
     def handle_safety_car(self, lap: int, reason: str) -> Dict:
@@ -1143,6 +1714,7 @@ class EnhancedRaceSimulator:
             dice_type="d6",
             dice_result=sc_laps,
             outcome=f"sc_for_{sc_laps}_laps",
+            race_time=self.get_relative_time(),
             details={"reason": reason},
         )
 
@@ -1170,6 +1742,7 @@ class EnhancedRaceSimulator:
             dice_type="d3",
             dice_result=vsc_laps,
             outcome=f"vsc_for_{vsc_laps}_laps",
+            race_time=self.get_relative_time(),
             details={"reason": reason},
         )
 
@@ -1218,8 +1791,11 @@ class EnhancedRaceSimulator:
             track_pit_time = 25.0  # Default
 
             if self.pitlane_data is not None:
-                track_row = self.pitlane_data[
-                    self.pitlane_data["Track"] == self.track_name
+                # Handle case-insensitive track matching
+                pitlane_copy = self.pitlane_data.copy()
+                pitlane_copy["Track_lower"] = pitlane_copy["Track"].str.lower()
+                track_row = pitlane_copy[
+                    pitlane_copy["Track_lower"] == self.track_name.lower()
                 ]
                 if len(track_row) > 0:
                     track_pit_time_val = track_row["Pit Time"]
@@ -1239,6 +1815,7 @@ class EnhancedRaceSimulator:
                 dice_type="pit_dice",
                 dice_result=int(tire_change_time * 10),
                 outcome="completed",
+                race_time=self.get_relative_time(),
                 details={
                     "pit_time": pit_time,
                     "track_pit_time": track_pit_time,
@@ -1317,7 +1894,10 @@ class EnhancedRaceSimulator:
     def run_simulation(self) -> Dict[str, Dict]:
         """Run the complete race simulation."""
         print(f"\n=== Enhanced Race Simulation ===")
-        print(f"Track: {self.track_name}, Year: {self.year}, Laps: {self.num_laps}")
+        print(f"Track: {self.track_name}, Laps: {self.num_laps}")
+
+        # Record simulation start time for relative timestamps
+        self.simulation_start_time = datetime.now()
 
         # Initialize driver results
         results = {}
@@ -1325,11 +1905,14 @@ class EnhancedRaceSimulator:
         # Get pitlane time
         track_pit_time = 25.0
         if self.pitlane_data is not None:
-            track_row = self.pitlane_data[self.pitlane_data["Track"] == self.track_name]
+            # Handle case-insensitive track matching
+            pitlane_copy = self.pitlane_data.copy()
+            pitlane_copy["Track_lower"] = pitlane_copy["Track"].str.lower()
+            track_row = pitlane_copy[
+                pitlane_copy["Track_lower"] == self.track_name.lower()
+            ]
             if len(track_row) > 0:
-                pit_time_vals = track_row["Pit Time"]
-                if len(pit_time_vals) > 0:
-                    track_pit_time = float(pit_time_vals.iloc[0])
+                track_pit_time = float(track_row.iloc[0]["Pit Time"])
 
         # Generate team strategies
         team_strategies = {}
@@ -1444,8 +2027,8 @@ class EnhancedRaceSimulator:
                 if self.race_state.vsc_laps_remaining <= 0:
                     self.race_state.vsc_active = False
 
-            # Check for incidents (every few laps)
-            if lap > 2 and lap % 5 == 0:
+            # Check for incidents every lap
+            if lap > 2:
                 incidents = self.check_for_incidents(lap, list(self.driver_data.keys()))
                 for incident in incidents:
                     results[incident["driver"]]["incidents"].append(incident)
@@ -1553,7 +2136,6 @@ class EnhancedRaceSimulator:
 def save_race_results(
     results: Dict[str, Dict],
     track_name: str,
-    year: int,
     driver_data: Dict[str, Dict],
     output_dir: str,
     fault_degradation: Optional[Dict[str, float]] = None,
@@ -1604,10 +2186,38 @@ def save_race_results(
 
     df = pd.DataFrame(rows)
 
-    # Sort by finished position (ascending)
-    df = df.sort_values(by="position", ascending=True)
+    # Separate finishers from DNFs
+    finishers = df[df["dnf"] == ""].copy()
+    dnfs = df[df["dnf"] == "DNF"].copy()
 
-    filename = f"race_results_{track_name.lower()}_{year}.csv"
+    # Sort finishers by position (ascending)
+    finishers = finishers.sort_values(by="position", ascending=True)
+
+    # Sort DNFs by lap_dnfed (descending - those who lasted longer get better positions)
+    # Convert lap_dnfed to numeric for sorting
+    if len(dnfs) > 0:
+        dnfs["lap_dnfed_num"] = pd.to_numeric(
+            dnfs["lap_dnfed"], errors="coerce"
+        ).fillna(0)
+        dnfs = dnfs.sort_values(by="lap_dnfed_num", ascending=False)
+        # Drop the temporary column
+        dnfs = dnfs.drop(columns=["lap_dnfed_num"])
+
+    # Reassign positions: finishers get 1 to N, then DNFs continue from there
+    # First, update finisher positions to be sequential
+    finisher_positions = list(range(1, len(finishers) + 1))
+    finishers["position"] = finisher_positions
+
+    # Then, assign DNF positions to continue after finishers
+    if len(dnfs) > 0:
+        dnf_start_position = len(finishers) + 1
+        dnf_positions = list(range(dnf_start_position, dnf_start_position + len(dnfs)))
+        dnfs["position"] = dnf_positions
+
+    # Combine: finishers first, then DNFs
+    df = pd.concat([finishers, dnfs], ignore_index=True)
+
+    filename = f"race_results_{track_name.lower()}.csv"
     filepath = os.path.join(output_dir, filename)
     df.to_csv(filepath, index=False)
     print(f"Race results saved to: {filepath}")
@@ -1623,12 +2233,6 @@ def main(argv=None):
 
     parser = argparse.ArgumentParser(
         description="Enhanced F1 Race Simulation with Incident and DRS Integration"
-    )
-    parser.add_argument(
-        "--year",
-        type=int,
-        default=2024,
-        help="Season year (default: 2024)",
     )
     parser.add_argument(
         "--gp-name",
@@ -1667,7 +2271,6 @@ def main(argv=None):
         random.seed(args.seed)
         np.random.seed(args.seed)
 
-    year = args.year
     gp_name = args.gp_name
 
     # Resolve number of laps
@@ -1682,7 +2285,7 @@ def main(argv=None):
     print("=" * 60)
     print("ENHANCED F1 RACE SIMULATION")
     print("=" * 60)
-    print(f"Track: {gp_name}, Year: {year}")
+    print(f"Track: {gp_name}")
     print(f"Laps: {num_laps}")
     print(f"DRS Enabled: {not args.no_drs}")
     print(f"Incidents Enabled: {not args.no_incidents}")
@@ -1700,6 +2303,12 @@ def main(argv=None):
 
     driver_data = read_driver_data(csv_file)
     print(f"\nLoaded {len(driver_data)} drivers")
+
+    # Filter Andretti drivers based on GP attendance
+    driver_data = filter_andretti_drivers(driver_data, gp_name)
+    print(
+        f"Running with {len(driver_data)} drivers (Andretti: {'attending' if is_andretti_participating(gp_name) else 'not attending'})"
+    )
 
     # Load pit stop data
     pit_data = load_pit_stop_data()
@@ -1732,7 +2341,7 @@ def main(argv=None):
         print(f"  P{driver_data[driver]['grid_position']}: {driver}")
 
     # Initialize dice logger
-    dice_logger = DiceRollingLogger(gp_name, year)
+    dice_logger = DiceRollingLogger(gp_name)
 
     # Get team stabilities
     team_stabilities = get_team_stabilities()
@@ -1740,7 +2349,6 @@ def main(argv=None):
     # Create and run simulation
     simulator = EnhancedRaceSimulator(
         track_name=gp_name,
-        year=year,
         num_laps=num_laps,
         driver_data=driver_data,
         team_stabilities=team_stabilities,
@@ -1770,7 +2378,6 @@ def main(argv=None):
     save_race_results(
         results,
         gp_name,
-        year,
         driver_data,
         race_output_dir,
         fault_degradation,
@@ -1784,20 +2391,17 @@ def main(argv=None):
         from simulation.report_generator import generate_report
 
         race_results_path = os.path.join(
-            race_output_dir, f"race_results_{gp_name.lower()}_{year}.csv"
+            race_output_dir, f"race_results_{gp_name.lower()}.csv"
         )
         dice_rolls_path = os.path.join(
-            race_output_dir, f"dice_rolls_{gp_name.lower()}_{year}.csv"
+            race_output_dir, f"dice_rolls_{gp_name.lower()}.csv"
         )
-        report_path = os.path.join(
-            race_output_dir, f"race_report_{gp_name.lower()}_{year}.md"
-        )
+        report_path = os.path.join(race_output_dir, f"race_report_{gp_name.lower()}.md")
 
         generate_report(
             race_results_path=race_results_path,
             dice_rolls_path=dice_rolls_path,
             track_name=gp_name,
-            year=year,
             output_path=report_path,
         )
     except Exception as e:
@@ -1810,11 +2414,6 @@ def main(argv=None):
     print(f"\nDice Roll Summary:")
     for incident_type, count in dice_logger.get_summary().items():
         print(f"  {incident_type}: {count}")
-
-    print(f"\nIncident Summary:")
-    for driver, result in results.items():
-        if result["incidents"]:
-            print(f"  {driver}: {len(result['incidents'])} incidents")
 
     print("\n" + "=" * 60)
     print("SIMULATION COMPLETE")

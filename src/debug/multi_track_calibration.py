@@ -37,12 +37,11 @@ warnings.filterwarnings("ignore")
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-# Import simulation modules
-from src.simulation.long_dist_sim_with_box import (
+# Import simulation modules from enhanced simulation
+from src.simulation.enhanced_long_dist_sim import (
     read_driver_data,
     simulate_race_with_pit_stops,
     calculate_base_lap_time,
-    get_track_base_lap,
     load_pit_stop_data,
     load_pitlane_time_data,
     get_track_characteristics,

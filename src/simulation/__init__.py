@@ -4,18 +4,14 @@ This module contains the long-distance race simulation functionality:
 - Race simulation with pit stops
 - Strategy modelling
 - Position progression analysis
+
+Primary simulation: enhanced_long_dist_sim.py
 """
 
-from .long_dist_sim_with_box import (
-    simulate_race_with_pit_stops,
-    determine_pit_strategy,
-    generate_pit_laps,
+from .enhanced_long_dist_sim import (
     main,
 )
 
 __all__ = [
-    "simulate_race_with_pit_stops",
-    "determine_pit_strategy",
-    "generate_pit_laps",
     "main",
 ]
