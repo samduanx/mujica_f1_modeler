@@ -375,7 +375,7 @@ class DriverErrorResolver:
 ### 4.1 Stability-Based Probability
 
 Each team has a stability rating (稳定性) that directly affects fault probability.
-Based on actual team data from `docs/spain_team.csv`:
+Based on actual team data from `data/spain_team.csv`:
 
 | Team | Stability |
 |------|-----------|
@@ -1099,7 +1099,7 @@ class TimeSteppedDRSSimulator:
 
 ## 7. Team Stability Configurations
 
-**Based on actual data from `docs/spain_team.csv`**
+**Based on actual data from `data/spain_team.csv`**
 
 ```python
 # Pre-configured team stability values from Spain 2024 data

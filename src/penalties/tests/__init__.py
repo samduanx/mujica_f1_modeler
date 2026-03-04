@@ -1,0 +1,1 @@
+"""Penalty system tests."""

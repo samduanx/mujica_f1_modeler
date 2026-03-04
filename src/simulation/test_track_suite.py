@@ -107,7 +107,7 @@ os.makedirs(RACE_REPORTS_DIR, exist_ok=True)
 # =============================================================================
 
 # Default driver/team data for generating CSV files
-# Matches docs/spain_ratings.csv reference file
+# Matches data/spain_team.csv reference file
 DEFAULT_DRIVER_DATA = [
     # Red Bull
     ("Verstappen", "Red Bull", 100.5, 308.34, 309.89),
@@ -142,7 +142,7 @@ DEFAULT_DRIVER_DATA = [
     # Williams
     ("Albon", "Williams", 100.1, 289.55, 289.84),
     ("Latifi", "Williams", 99.625, 289.55, 288.46),
-]  # 22 drivers total - matches reference file docs/spain_ratings.csv
+]  # 22 drivers total - matches reference file data/spain_team.csv
 
 
 def create_driver_csv(track_name: str, output_dir: str = "outputs/tables") -> str:

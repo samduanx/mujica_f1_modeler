@@ -61,7 +61,7 @@ class TeamStability:
     """
     Team's car stability configuration.
 
-    Based on actual data from docs/spain_team.csv:
+    Based on actual data from data/spain_team.csv:
     - Stability range: 95.0 - 98.5
     - Higher stability = lower fault probability
     """

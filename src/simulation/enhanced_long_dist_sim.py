@@ -71,17 +71,45 @@ from incidents import (
     DiceRoller,
 )
 
+# Import weather system modules
+from weather.integrators.enhanced_sim_weather import (
+    SimWeatherIntegration,
+    WeatherLapData,
+    RaceWeatherLog,
+)
+from weather.weather_types import (
+    WeatherType,
+    TrackCondition,
+    RaceControlState,
+    RainIntensity,
+    get_track_info,
+)
+
 # Import DRS system modules
 from drs.driver_state import DriverRaceState
 from drs.base_config import TrackDRSConfig, DRSZone
 from drs.zones import TRACKS as DRS_TRACKS
+
+# Import Strategist system modules
+from src.strategist import (
+    StrategistManager,
+    StrategistProfile,
+    StrategyDecision,
+    RaceContext,
+    DecisionType,
+    DriverComplianceLevel,
+    PaceMode,
+    get_manager,
+)
+from src.strategist.integrators.race_sim_integration import (
+    StrategistIntegration,
+)
 
 # =============================================================================
 # STUB IMPLEMENTATIONS FOR MIGRATED FUNCTIONS
 # These were previously in long_dist_sim_with_box.py
 # =============================================================================
 
-import csv
 import json
 from pathlib import Path
 
@@ -169,7 +197,7 @@ def load_pit_stop_data() -> dict:
     """Load pit stop data from CSV."""
     pit_data = {}
     try:
-        with open("docs/pit_stop_strategies_2022_2024.csv", "r", encoding="utf-8") as f:
+        with open("data/pit_stop_strategies_2022_2024.csv", "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 track = row.get("Track", "").lower()
@@ -187,7 +215,7 @@ def load_pitlane_time_data():
     import pandas as pd
 
     # Try new location in docs first, then fall back to legacy location
-    for filepath in ["docs/pitlane_time.csv", "outputs/tables/pitlane_time.csv"]:
+    for filepath in ["data/pitlane_time.csv", "outputs/tables/pitlane_time.csv"]:
         try:
             df = pd.read_csv(filepath)
             return df
@@ -198,12 +226,45 @@ def load_pitlane_time_data():
 
 
 def get_track_characteristics() -> dict:
-    """Get track characteristics data."""
-    return {
-        "spain": {"abrasion": 0.8, "grip": 0.7},
-        "monaco": {"abrasion": 0.4, "grip": 0.9},
-        "monza": {"abrasion": 0.5, "grip": 0.6},
-    }
+    """Get track characteristics data from CSV file."""
+    import pandas as pd
+
+    # Try to load from CSV
+    try:
+        df = pd.read_csv("data/track_characteristics.csv")
+        track_chars = {}
+        for _, row in df.iterrows():
+            track_name = row["Track"].lower()
+            # Convert C(M), C(A), C(P) to abrasion/grip values
+            cm = row.get("C(M)", 1.0)
+            ca = row.get("C(A)", 1.0)
+            # Map to abrasion and grip (higher C(P) = more degradation = lower grip)
+            # C(P) typically ranges from 1.0 to 1.15
+            cp = row.get("C(P)", 1.0)
+
+            # Calculate abrasion (higher C(M) = more mechanical degradation)
+            # and grip (higher C(A) = more aerodynamic degradation affects grip)
+            # Use simplified mapping
+            abrasion = min(1.0, (cm - 0.9) * 10 + 0.3) if cm else 0.5
+            grip = max(0.3, 1.0 - (ca - 1.0) * 5) if ca else 0.7
+
+            track_chars[track_name] = {
+                "abrasion": round(abrasion, 2),
+                "grip": round(grip, 2),
+            }
+        return track_chars
+    except FileNotFoundError as e:
+        print(f"Warning: Could not load track_characteristics.csv: {e}")
+    except pd.errors.ParserError as e:
+        print(f"Warning: Could not parse track_characteristics.csv: {e}")
+    except Exception as e:
+        print(f"Warning: Unexpected error loading track_characteristics.csv: {e}")
+        # Fallback to hardcoded values
+        return {
+            "spain": {"abrasion": 0.8, "grip": 0.7},
+            "monaco": {"abrasion": 0.4, "grip": 0.9},
+            "monza": {"abrasion": 0.5, "grip": 0.6},
+        }
 
 
 def assign_team_strategies(
@@ -218,16 +279,17 @@ def assign_team_strategies(
         if team not in team_strategies:
             team_strategies[team] = {
                 "strategy": 1,
-                " tyre_compounds_set": ["HARD", "MEDIUM"],
+                "tyre_compounds_set": ["HARD", "MEDIUM"],
             }
     return team_strategies, driver_teams
 
 
-def generate_pit_laps(track_name: str, strategy: int, pit_data: dict) -> list:
+def generate_pit_laps(track_name: str, strategy, pit_data: dict) -> list:
     """Generate pit stop laps based on strategy."""
     track = track_name.lower()
     num_laps = DEFAULT_LAP_COUNTS.get(track, 66)
-    num_stops = strategy
+    # Convert strategy to int (handles both int and string inputs)
+    num_stops = int(strategy) if strategy is not None else 3
     if num_stops == 1:
         return [int(num_laps * 0.6)]
     elif num_stops == 2:
@@ -373,7 +435,6 @@ def build_arg_parser():
 
     parser = argparse.ArgumentParser(description="Enhanced F1 Race Simulation")
     parser.add_argument("--gp-name", type=str, default="Spain", help="Grand Prix name")
-    parser.add_argument("--year", type=int, default=2022, help="Season year")
     parser.add_argument("--laps", type=int, default=None, help="Number of laps")
     return parser
 
@@ -449,7 +510,6 @@ def get_track_base_lap(track_name: str) -> float:
 
 def simulate_race_with_pit_stops(
     track_name: str,
-    year: int,
     num_laps: int,
     driver_data: dict,
     pit_data: dict,
@@ -462,14 +522,11 @@ def simulate_race_with_pit_stops(
     This is a compatibility function that wraps the enhanced RaceSimulator.
     """
     if random_seed is not None:
-        import random
-
         random.seed(random_seed)
 
     # Create simulator
     sim = EnhancedRaceSimulator(
         track_name=track_name,
-        year=year,
         num_laps=num_laps,
         driver_data=driver_data,
     )
@@ -1097,6 +1154,16 @@ class RaceState:
         # driver_name -> retirement_reason
         self.retirement_reasons: Dict[str, str] = {}
 
+        # WEATHER TRACKING
+        # Weather integration state
+        self.weather_integration: Optional[SimWeatherIntegration] = None
+        self.current_weather_state: Optional[Any] = None
+        self.weather_events: List[Dict] = []
+        self.drs_enabled: bool = True  # DRS enabled by default
+        self.last_weather_pit_decision: Dict[
+            str, int
+        ] = {}  # driver -> lap of last weather pit
+
     def update_positions(self, driver_times: Dict[str, float]):
         """Update driver positions based on cumulative times."""
         sorted_drivers = sorted(driver_times.items(), key=lambda x: x[1])
@@ -1204,6 +1271,13 @@ class EnhancedRaceSimulator:
         # Initialize unlapping manager
         self.unlapping_manager = UnlappingManager()
 
+        # Initialize weather integration
+        self.weather_integration = SimWeatherIntegration(
+            gp_name=track_name,
+            seed=random_seed,
+        )
+        self.race_state.weather_integration = self.weather_integration
+
         # Initialize DRS config if available
         self.drs_config = self._get_drs_config(track_name)
 
@@ -1216,6 +1290,48 @@ class EnhancedRaceSimulator:
         # Vehicle fault check scheduling - dice roll determines next check lap
         # Initial check at lap 3, then dice determines next check interval
         self._next_vehicle_fault_check_lap: int = 3
+        # Driver error check interval - check every 3-5 laps to avoid excessive errors
+        self._next_driver_error_check_lap: int = 3
+
+        # =======================================================================
+        # STRATEGIST SYSTEM INTEGRATION
+        # =======================================================================
+        # Get Strategist Manager (loads from JSON automatically)
+        self.strategist_manager = get_manager()
+
+        # Create Strategist Integration for Ferrari (protagonist team)
+        self.strategist_integration = StrategistIntegration(
+            team="Ferrari",
+            seed=random_seed,
+        )
+
+        # Track strategic decisions for this race
+        self.strategic_decisions: List[Dict[str, Any]] = []
+        self.current_pace_mode: PaceMode = PaceMode.RACE
+        self.last_strategist_lap_check: int = 0
+
+        # Pit strategy tracking for dynamic pit decisions
+        self.last_pit_decision_lap: int = 0
+        self.ferrari_pit_strategy: Dict[
+            str, List[int]
+        ] = {}  # driver -> list of planned pit laps
+
+        # Strategist integrations for all teams (not just Ferrari)
+        self.team_strategist_integrations: Dict[str, StrategistIntegration] = {}
+        self.team_last_pit_decision_lap: Dict[str, int] = {}
+
+        # Initialize strategist for each team
+        for team in set(self.driver_teams.values()):
+            if team and team != "Unknown":
+                try:
+                    self.team_strategist_integrations[team] = StrategistIntegration(
+                        team=team,
+                        seed=random_seed,
+                    )
+                    self.team_last_pit_decision_lap[team] = 0
+                except ValueError:
+                    # No strategist found for this team
+                    pass
 
     def _get_drs_config(self, track_name: str) -> Optional[TrackDRSConfig]:
         """Get DRS configuration for the track."""
@@ -1244,6 +1360,305 @@ class EnhancedRaceSimulator:
             # This gives approximate time at start of current lap
             return (current_lap - 1) * self.base_lap_time
         return 0.0
+
+    def determine_starting_weather_dice_roll(self) -> Tuple[Any, str]:
+        """
+        Determine starting weather using dice rolls based on track precipitation rates.
+
+        Uses d100 roll against track-specific rain probability to determine if race
+        starts in wet conditions. Different tracks have different base rain chances
+        (e.g., Silverstone/Britain ~18%, Spain ~15%, Singapore ~50%).
+
+        Returns:
+            Tuple of (initial_weather_state, weather_description)
+        """
+        # Get track info for precipitation data
+        track_info = get_track_info(self.track_name)
+        base_rain_chance = track_info.get("rain_chance", 0.25)  # Default 25%
+
+        # Convert to percentage for dice roll (0-100)
+        rain_threshold = int(base_rain_chance * 100)
+
+        # Roll d100 for weather determination
+        weather_roll = roll_d100()
+
+        # Determine if it's raining based on track-specific probability
+        is_raining = weather_roll <= rain_threshold
+
+        if is_raining:
+            # Roll for rain intensity (d10)
+            intensity_roll = roll_d10()
+            if intensity_roll <= 4:
+                rain_intensity = RainIntensity.LIGHT
+                weather_desc = "Light rain at race start"
+            elif intensity_roll <= 7:
+                rain_intensity = RainIntensity.MODERATE
+                weather_desc = "Moderate rain at race start"
+            elif intensity_roll <= 9:
+                rain_intensity = RainIntensity.HEAVY
+                weather_desc = "Heavy rain at race start"
+            else:
+                rain_intensity = RainIntensity.TORRENTIAL
+                weather_desc = "Torrential rain at race start - considering red flag"
+        else:
+            rain_intensity = RainIntensity.NONE
+            # Roll for dry weather variation (d10)
+            dry_roll = roll_d10()
+            if dry_roll <= 6:
+                weather_desc = "Clear skies at race start"
+            elif dry_roll <= 9:
+                weather_desc = "Partly cloudy at race start"
+            else:
+                weather_desc = "Overcast but dry at race start"
+
+        # Log the dice roll
+        self.dice_logger.log_roll(
+            lap=0,
+            driver="WEATHER_SYSTEM",
+            incident_type="starting_weather_determination",
+            dice_type="d100",
+            dice_result=weather_roll,
+            outcome="rain" if is_raining else "dry",
+            race_time=0.0,
+            details={
+                "track": self.track_name,
+                "base_rain_chance": base_rain_chance,
+                "rain_threshold": rain_threshold,
+                "weather_description": weather_desc,
+                "rain_intensity": rain_intensity.name if is_raining else "NONE",
+            },
+        )
+
+        # Initialize weather integration for the race
+        race_duration_estimate = (self.num_laps * self.base_lap_time) / 60.0  # minutes
+        weather_log = self.weather_integration.initialize_race(race_duration_estimate)
+
+        # Get the initial weather from the generator
+        initial_weather = weather_log.initial_weather
+
+        # Override with dice-determined rain state for consistency
+        if is_raining:
+            initial_weather.rain_intensity = rain_intensity
+            initial_weather.weather_type = self._map_rain_to_weather_type(
+                rain_intensity
+            )
+            initial_weather.track_condition = TrackCondition.WET
+            initial_weather.precipitation_probability = 80.0
+        else:
+            initial_weather.rain_intensity = RainIntensity.NONE
+            initial_weather.track_condition = TrackCondition.DRY
+            initial_weather.precipitation_probability = 0.0
+
+        self.race_state.current_weather_state = initial_weather
+
+        return initial_weather, weather_desc
+
+    def _map_rain_to_weather_type(self, intensity: RainIntensity) -> WeatherType:
+        """Map rain intensity to weather type."""
+        mapping = {
+            RainIntensity.NONE: WeatherType.CLEAR,
+            RainIntensity.LIGHT: WeatherType.LIGHT_RAIN,
+            RainIntensity.MODERATE: WeatherType.MODERATE_RAIN,
+            RainIntensity.HEAVY: WeatherType.HEAVY_RAIN,
+            RainIntensity.TORRENTIAL: WeatherType.TORRENTIAL_RAIN,
+        }
+        return mapping.get(intensity, WeatherType.CLEAR)
+
+    def update_weather_for_lap(self, lap: int, race_time_minutes: float) -> Dict:
+        """
+        Update weather for the current lap and return weather effects.
+
+        Args:
+            lap: Current lap number
+            race_time_minutes: Race time in minutes
+
+        Returns:
+            Dictionary with weather effects and state
+        """
+        if self.weather_integration is None:
+            return {
+                "lap_time_modifier": 0.0,
+                "drs_enabled": True,
+                "pit_for_weather": False,
+            }
+
+        # Get current weather from integration
+        current_weather = self.weather_integration.get_current_weather(
+            lap, race_time_minutes
+        )
+        self.race_state.current_weather_state = current_weather
+
+        # Log weather for this lap
+        lap_weather_data = self.weather_integration.log_lap_weather(
+            lap, race_time_minutes
+        )
+
+        # Get lap time modifier
+        lap_time_modifier = self.weather_integration.get_lap_time_modifier(
+            current_weather
+        )
+
+        # Determine DRS availability
+        drs_enabled = self._is_drs_enabled_in_weather(current_weather)
+        self.race_state.drs_enabled = drs_enabled
+
+        # Check for race control response
+        rc_state = self.weather_integration.get_race_control_state(current_weather)
+
+        # Determine if pit stop is recommended for weather
+        recommended_tyre, pit_reason = self.weather_integration.get_recommended_tyre(
+            current_weather
+        )
+        pit_for_weather = (
+            recommended_tyre != "dry"
+            and current_weather.track_condition != TrackCondition.DRY
+        )
+
+        # Check for significant weather changes
+        weather_changed = False
+        if len(self.race_state.weather_events) > 0:
+            last_event = self.race_state.weather_events[-1]
+            if last_event.get("weather_type") != current_weather.weather_type.value:
+                weather_changed = True
+
+        # Log weather event if significant change
+        if weather_changed or lap == 1:
+            self.race_state.weather_events.append(
+                {
+                    "lap": lap,
+                    "race_time": race_time_minutes,
+                    "weather_type": current_weather.weather_type.value,
+                    "track_condition": current_weather.track_condition.value,
+                    "rain_intensity": current_weather.rain_intensity.name,
+                    "drs_enabled": drs_enabled,
+                    "rc_state": rc_state.value,
+                }
+            )
+
+            # Print weather update for significant changes
+            if weather_changed:
+                print(
+                    f"\n*** Weather Change at Lap {lap}: {current_weather.weather_type.value} ***"
+                )
+                print(
+                    f"    Track: {current_weather.track_condition.value}, DRS: {'Enabled' if drs_enabled else 'Disabled'}"
+                )
+
+        return {
+            "lap_time_modifier": lap_time_modifier,
+            "drs_enabled": drs_enabled,
+            "pit_for_weather": pit_for_weather,
+            "recommended_tyre": recommended_tyre,
+            "rc_state": rc_state,
+            "weather_type": current_weather.weather_type,
+            "track_condition": current_weather.track_condition,
+            "rain_intensity": current_weather.rain_intensity,
+            "rain_probability": current_weather.precipitation_probability,
+        }
+
+    def _is_drs_enabled_in_weather(self, weather: Any) -> bool:
+        """
+        Determine if DRS should be enabled based on weather conditions.
+
+        DRS is disabled when:
+        - Rain intensity is MODERATE or higher
+        - Track condition is WET or FLOODED
+        - Race control has deployed VSC, SC, or Red Flag
+
+        Returns:
+            True if DRS is enabled, False otherwise
+        """
+        # Disable DRS in moderate or heavier rain
+        if weather.rain_intensity in [
+            RainIntensity.MODERATE,
+            RainIntensity.HEAVY,
+            RainIntensity.TORRENTIAL,
+        ]:
+            return False
+
+        # Disable DRS on wet or flooded track
+        if weather.track_condition in [TrackCondition.WET, TrackCondition.FLOODED]:
+            return False
+
+        return True
+
+    def handle_weather_race_control(
+        self, lap: int, weather_effects: Dict
+    ) -> Optional[Dict]:
+        """
+        Handle race control responses to weather conditions.
+
+        Returns race control event if VSC/SC/Red Flag should be deployed.
+        """
+        rc_state = weather_effects.get("rc_state", RaceControlState.GREEN)
+
+        # Check if we already have active safety car periods
+        if self.race_state.sc_active or self.race_state.vsc_active:
+            return None
+
+        # Deploy safety car for heavy rain
+        if rc_state == RaceControlState.SAFETY_CAR and weather_effects[
+            "weather_type"
+        ] in [WeatherType.HEAVY_RAIN, WeatherType.TORRENTIAL_RAIN]:
+            return self.handle_safety_car(lap, "Heavy rain conditions")
+
+        # Deploy VSC for moderate rain with wet track
+        if rc_state == RaceControlState.VSC:
+            return self.handle_vsc(lap, "Rain - wet track conditions")
+
+        # Red flag for torrential rain
+        if rc_state == RaceControlState.RED_FLAG:
+            print(f"\n*** RED FLAG at Lap {lap}: Torrential rain conditions ***")
+            self.race_state.red_flag_active = True
+            return {
+                "type": "red_flag",
+                "lap": lap,
+                "reason": "Torrential rain - unsafe conditions",
+            }
+
+        return None
+
+    def should_pit_for_weather(
+        self, driver: str, lap: int, current_tyre: str, weather_effects: Dict
+    ) -> Tuple[bool, str]:
+        """
+        Determine if a driver should pit for weather-related tyre change.
+
+        Args:
+            driver: Driver name
+            lap: Current lap
+            current_tyre: Current tyre compound
+            weather_effects: Weather effects dictionary
+
+        Returns:
+            Tuple of (should_pit, reason)
+        """
+        recommended_tyre = weather_effects.get("recommended_tyre", "dry")
+        track_condition = weather_effects.get("track_condition", TrackCondition.DRY)
+
+        # Check if driver already pitted recently for weather
+        last_pit = self.race_state.last_weather_pit_decision.get(driver, 0)
+        if lap - last_pit < 3:  # Don't pit again within 3 laps
+            return False, ""
+
+        # Dry tyres on wet track - should pit for inters or wets
+        if track_condition in [
+            TrackCondition.WET,
+            TrackCondition.FLOODED,
+        ] and current_tyre in ["SOFT", "MEDIUM", "HARD"]:
+            if recommended_tyre == "wet":
+                return True, "Pitting for Full Wet tyres - heavy rain"
+            elif recommended_tyre == "intermediate":
+                return True, "Pitting for Intermediate tyres - light rain"
+
+        # Wet tyres on drying track - consider switching to dry
+        if track_condition == TrackCondition.DRY and current_tyre in [
+            "INTERMEDIATE",
+            "WET",
+        ]:
+            return True, "Pitting for dry tyres - track drying"
+
+        return False, ""
 
     def simulate_start(self, grid_positions: Dict[str, int]) -> Dict[str, float]:
         """
@@ -1499,46 +1914,52 @@ class EnhancedRaceSimulator:
                 next_check_interval = roll_d10()
                 self._next_vehicle_fault_check_lap = lap + next_check_interval
 
-            # Roll for driver error using personality-based probability
-            error_roll = roll_d100()
-            error_threshold = calculate_driver_error_probability(
-                driver,
-                position=driver_position,
-                is_fighting=is_fighting,
-                is_leading=is_leading,
-            )
-
-            self.dice_logger.log_roll(
-                lap=lap,
-                driver=driver,
-                incident_type="driver_error_check",
-                dice_type="d100",
-                dice_result=error_roll,
-                outcome="no_error"
-                if error_roll > error_threshold
-                else "error_occurred",
-                race_time=self.get_relative_time(),
-                details={
-                    "position": driver_position,
-                    "error_threshold": round(error_threshold, 2),
-                },
-            )
-
-            if error_roll <= error_threshold:
-                error_type_roll = roll_d6()
-                incidents.append(
-                    {
-                        "type": "driver_error",
-                        "driver": driver,
-                        "lap": lap,
-                        "error_type": "locking_brakes"
-                        if error_type_roll <= 2
-                        else "off_track"
-                        if error_type_roll <= 4
-                        else "mistake",
-                        "time_loss": random.uniform(0.5, 3.0),
-                    }
+            # Driver error check - only check at intervals to avoid excessive errors
+            if lap == self._next_driver_error_check_lap:
+                # Roll for driver error using personality-based probability
+                error_roll = roll_d100()
+                error_threshold = calculate_driver_error_probability(
+                    driver,
+                    position=driver_position,
+                    is_fighting=is_fighting,
+                    is_leading=is_leading,
                 )
+
+                self.dice_logger.log_roll(
+                    lap=lap,
+                    driver=driver,
+                    incident_type="driver_error_check",
+                    dice_type="d100",
+                    dice_result=error_roll,
+                    outcome="no_error"
+                    if error_roll > error_threshold
+                    else "error_occurred",
+                    race_time=self.get_relative_time(),
+                    details={
+                        "position": driver_position,
+                        "error_threshold": round(error_threshold, 2),
+                    },
+                )
+
+                if error_roll <= error_threshold:
+                    error_type_roll = roll_d6()
+                    incidents.append(
+                        {
+                            "type": "driver_error",
+                            "driver": driver,
+                            "lap": lap,
+                            "error_type": "locking_brakes"
+                            if error_type_roll <= 2
+                            else "off_track"
+                            if error_type_roll <= 4
+                            else "mistake",
+                            "time_loss": random.uniform(0.5, 3.0),
+                        }
+                    )
+
+                # Schedule next driver error check (every 3-5 laps to reduce frequency)
+                next_error_check = random.randint(3, 5)
+                self._next_driver_error_check_lap = lap + next_error_check
 
         return incidents
 
@@ -1920,11 +2341,12 @@ class EnhancedRaceSimulator:
 
         for team in set(self.driver_teams.values()):
             if team != "Unknown":
-                # Monaco-specific: Force 1-stop strategy (Fix 2c)
+                # Monaco-specific: 1-stop strategy dominant (Fix 2c)
                 # Real F1: Almost all teams use 1-stop at Monaco due to low tire wear
+                # and long pit lane (~18 seconds). Two stops are extremely rare but possible.
                 if is_monaco:
-                    # 85% chance of 1-stop, 15% chance of 2-stop (very rare)
-                    strategy = random.choices(["1", "2"], weights=[0.85, 0.15])[0]
+                    # 95% chance of 1-stop, 5% chance of 2-stop (rare but interesting scenarios)
+                    strategy = random.choices(["1", "2"], weights=[0.95, 0.05])[0]
                 else:
                     strategy = determine_pit_strategy(self.track_name, self.pit_data)
 
@@ -1944,7 +2366,7 @@ class EnhancedRaceSimulator:
                 team_strategies[team] = {
                     "strategy": strategy,
                     "pit_laps": pit_laps,
-                    " tyre_compounds_set": tyre_compounds_set,
+                    "tyre_compounds_set": tyre_compounds_set,
                 }
 
         # Initialize driver states
@@ -1964,8 +2386,8 @@ class EnhancedRaceSimulator:
                 results[driver]["pit_laps"] = generate_pit_laps(
                     self.track_name, team_strategies[team]["strategy"], self.pit_data
                 )
-                results[driver][" tyre_sequence"] = generate_individual_tyre_sequence(
-                    team_strategies[team][" tyre_compounds_set"]
+                results[driver]["tyre_sequence"] = generate_individual_tyre_sequence(
+                    team_strategies[team]["tyre_compounds_set"]
                 )
             else:
                 strategy = determine_pit_strategy(self.track_name, self.pit_data)
@@ -1979,7 +2401,7 @@ class EnhancedRaceSimulator:
                 results[driver]["pit_laps"] = generate_pit_laps(
                     self.track_name, strategy, self.pit_data
                 )
-                results[driver][" tyre_sequence"] = [
+                results[driver]["tyre_sequence"] = [
                     roll_tyre_for_track(self.track_name)
                     for _ in range(strategy_int + 1)
                 ]
@@ -1993,20 +2415,116 @@ class EnhancedRaceSimulator:
         # Simulate start
         start_deltas = self.simulate_start(grid_positions)
 
+        # Initialize weather with dice-based determination
+        initial_weather, weather_desc = self.determine_starting_weather_dice_roll()
+        print(f"\n=== Weather: {weather_desc} ===")
+        print(
+            f"    Track: {self.track_name}, Rain Chance: {get_track_info(self.track_name).get('rain_chance', 0.25) * 100:.1f}%"
+        )
+
         # Main race loop
         print(f"\n=== Starting Race (Lap 1 to {self.num_laps}) ===")
 
         for lap in range(1, self.num_laps + 1):
             self.race_state.current_lap = lap
 
+            # Get Ferrari driver (protagonist) for strategist decisions
+            ferrari_drivers = [
+                d for d, t in self.driver_teams.items() if t == "Ferrari"
+            ]
+
             if lap % 10 == 0:
                 print(f"  Lap {lap}/{self.num_laps}...")
 
-            # Check for random VSC/SC deployment (except first few laps)
+            # Update weather for this lap
+            race_time_minutes = self.get_relative_time() / 60.0
+            weather_effects = self.update_weather_for_lap(lap, race_time_minutes)
+
+            # Handle race control responses to weather
+            weather_rc_event = self.handle_weather_race_control(lap, weather_effects)
+            if weather_rc_event:
+                print(f"  Weather-triggered: {weather_rc_event['reason']}")
+
+            # ===================================================================
+            # STRATEGIST HOOK: Weather Response Decision
+            # ===================================================================
+            # Check if it's raining using rain_intensity enum from weather_effects
+            rain_intensity = weather_effects.get("rain_intensity", RainIntensity.NONE)
+            if ferrari_drivers and rain_intensity != RainIntensity.NONE:
+                # Update strategist context with current race state
+                ferrari_driver = ferrari_drivers[0]
+                ferrari_pos = (
+                    self.race_state.get_position(ferrari_driver)
+                    if hasattr(self.race_state, "get_position")
+                    else results[ferrari_driver].get("position", 10)
+                )
+
+                # Get tyre life for Ferrari driver
+                ferrari_tyre_life = lap_count_on_tyre = (
+                    lap
+                    - sum(1 for pl in results[ferrari_driver]["pit_laps"] if pl < lap)
+                    if ferrari_driver in results
+                    else 0
+                )
+
+                is_wet = rain_intensity != RainIntensity.NONE
+                rain_prob = weather_effects.get("rain_probability", 0.0)
+                rain_eta = None  # Not currently available from weather system
+
+                # Create race context for strategist
+                self.strategist_integration.update_context(
+                    current_lap=lap,
+                    total_laps=self.num_laps,
+                    race_position=ferrari_pos,
+                    tyre_life=ferrari_tyre_life,
+                    current_tyre=results[ferrari_driver]["tyre_sequence"][
+                        min(
+                            sum(
+                                1
+                                for pl in results[ferrari_driver]["pit_laps"]
+                                if pl < lap
+                            ),
+                            len(results[ferrari_driver]["tyre_sequence"]) - 1,
+                        )
+                    ]
+                    if ferrari_driver in results
+                    else "UNKNOWN",
+                    is_wet=is_wet,
+                    rain_eta=rain_eta,
+                    is_sc_active=self.race_state.sc_active,
+                    is_vsc_active=self.race_state.vsc_active,
+                )
+
+                # Make weather decision
+                weather_decision = self.strategist_integration.on_weather_decision(
+                    self.strategist_integration.state.current_context,
+                    rain_probability=rain_prob,
+                    rain_eta=rain_eta,
+                )
+
+                if weather_decision:
+                    self.strategic_decisions.append(
+                        {
+                            "lap": lap,
+                            "decision_type": "weather_response",
+                            "roll": weather_decision.get("roll"),
+                            "outcome": weather_decision.get("outcome"),
+                            "recommended_action": weather_decision.get(
+                                "recommended_action"
+                            ),
+                            "timing_offset": weather_decision.get("timing_offset"),
+                        }
+                    )
+                    print(
+                        f"  [STRATEGIST] Weather decision: {weather_decision.get('recommended_action')} (roll: {weather_decision.get('roll')}, outcome: {weather_decision.get('outcome')})"
+                    )
+
+            # Check for random VSC/SC deployment (except first few laps and not during weather events)
             if (
                 lap > 3
                 and not self.race_state.sc_active
                 and not self.race_state.vsc_active
+                and not weather_rc_event
             ):
                 sc_roll = roll_d100()
                 if sc_roll >= 98:  # 2% chance of SC
@@ -2014,6 +2532,71 @@ class EnhancedRaceSimulator:
                     self.handle_safety_car(lap, reason)
                 elif sc_roll >= 95:  # 3% chance of VSC
                     self.handle_vsc(lap, "debris")
+
+            # ===================================================================
+            # STRATEGIST HOOK: SC/VSC Response Decision
+            # ===================================================================
+            # Check if SC or VSC was just deployed or is ending
+            sc_deployed = self.race_state.sc_active
+            vsc_deployed = self.race_state.vsc_active
+
+            if (sc_deployed or vsc_deployed) and ferrari_drivers:
+                ferrari_driver = ferrari_drivers[0]
+                ferrari_pos = (
+                    results[ferrari_driver].get("position", 10)
+                    if ferrari_driver in results
+                    else 10
+                )
+                laps_until_end = self.num_laps - lap
+
+                # Update context and make SC decision
+                self.strategist_integration.update_context(
+                    current_lap=lap,
+                    total_laps=self.num_laps,
+                    race_position=ferrari_pos,
+                    tyre_life=lap
+                    - sum(1 for pl in results[ferrari_driver]["pit_laps"] if pl < lap)
+                    if ferrari_driver in results
+                    else 0,
+                    current_tyre=results[ferrari_driver]["tyre_sequence"][
+                        min(
+                            sum(
+                                1
+                                for pl in results[ferrari_driver]["pit_laps"]
+                                if pl < lap
+                            ),
+                            len(results[ferrari_driver]["tyre_sequence"]) - 1,
+                        )
+                    ]
+                    if ferrari_driver in results
+                    else "UNKNOWN",
+                    is_wet=False,
+                    rain_eta=None,
+                    is_sc_active=sc_deployed,
+                    is_vsc_active=vsc_deployed,
+                )
+
+                sc_decision = self.strategist_integration.on_sc_decision(
+                    self.strategist_integration.state.current_context,
+                    is_vsc=vsc_deployed,
+                    laps_until_end=laps_until_end,
+                )
+
+                if sc_decision:
+                    self.strategic_decisions.append(
+                        {
+                            "lap": lap,
+                            "decision_type": "sc_response"
+                            if not vsc_deployed
+                            else "vsc_response",
+                            "roll": sc_decision.get("roll"),
+                            "outcome": sc_decision.get("outcome"),
+                            "recommended_action": sc_decision.get("recommended_action"),
+                        }
+                    )
+                    print(
+                        f"  [STRATEGIST] {'SC' if sc_deployed else 'VSC'} response: {sc_decision.get('recommended_action')} (roll: {sc_decision.get('roll')})"
+                    )
 
             # Process safety car laps
             if self.race_state.sc_active:
@@ -2036,6 +2619,166 @@ class EnhancedRaceSimulator:
             # Simulate each driver
             lap_times_this_lap = {}
 
+            # ===================================================================
+            # STRATEGIST HOOK: Periodic Pace Management (every 5 laps)
+            # ===================================================================
+            if lap - self.last_strategist_lap_check >= 5 and ferrari_drivers:
+                self.last_strategist_lap_check = lap
+
+                ferrari_driver = ferrari_drivers[0]
+                ferrari_pos = (
+                    results[ferrari_driver].get("position", 10)
+                    if ferrari_driver in results
+                    else 10
+                )
+
+                self.strategist_integration.update_context(
+                    current_lap=lap,
+                    total_laps=self.num_laps,
+                    race_position=ferrari_pos,
+                    tyre_life=lap
+                    - sum(1 for pl in results[ferrari_driver]["pit_laps"] if pl < lap)
+                    if ferrari_driver in results
+                    else 0,
+                    current_tyre=results[ferrari_driver]["tyre_sequence"][
+                        min(
+                            sum(
+                                1
+                                for pl in results[ferrari_driver]["pit_laps"]
+                                if pl < lap
+                            ),
+                            len(results[ferrari_driver]["tyre_sequence"]) - 1,
+                        )
+                    ]
+                    if ferrari_driver in results
+                    else "UNKNOWN",
+                    is_wet=False,
+                    rain_eta=None,
+                    is_sc_active=self.race_state.sc_active,
+                    is_vsc_active=self.race_state.vsc_active,
+                )
+
+                # Decide pace mode
+                pace_decision = self.strategist_integration.on_pace_decision(
+                    self.strategist_integration.state.current_context,
+                    requested_mode=PaceMode.RACE,
+                )
+
+                if pace_decision:
+                    self.strategic_decisions.append(
+                        {
+                            "lap": lap,
+                            "decision_type": "pace_management",
+                            "roll": pace_decision.get("roll"),
+                            "outcome": pace_decision.get("outcome"),
+                            "selected_mode": pace_decision.get("selected_mode"),
+                            "speed_modifier": pace_decision.get("speed_modifier"),
+                        }
+                    )
+                    # Store pace mode for lap time calculations
+                    self.current_pace_mode = PaceMode(
+                        pace_decision.get("selected_mode", "race")
+                    )
+                    print(
+                        f"  [STRATEGIST] Pace decision: {pace_decision.get('selected_mode')} (roll: {pace_decision.get('roll')})"
+                    )
+
+            # ===================================================================
+            # STRATEGIST HOOK: Dynamic Pit Stop Decision (when approaching pit window)
+            # ===================================================================
+            # Process pit decisions for ALL teams that have strategist integrations
+            for team, strategist in self.team_strategist_integrations.items():
+                # Find the first driver from this team
+                team_driver = None
+                for driver_name, driver_team in self.driver_teams.items():
+                    if driver_team == team and driver_name in results:
+                        team_driver = driver_name
+                        break
+
+                if not team_driver:
+                    continue
+
+                driver_result = results[team_driver]
+                planned_pits = driver_result.get("pit_laps", [])
+
+                # Find the next planned pit lap
+                next_pit_lap = None
+                for pit_lap in planned_pits:
+                    if pit_lap > lap:
+                        next_pit_lap = pit_lap
+                        break
+
+                # Check if we're approaching pit window (within 3 laps)
+                if next_pit_lap and lap >= next_pit_lap - 3:
+                    # Check if we already made a pit decision recently for this team
+                    last_decision = self.team_last_pit_decision_lap.get(team, 0)
+                    if lap - last_decision >= 3:
+                        driver_pos = driver_result.get("position", 10)
+
+                        # Update context for pit decision
+                        strategist.update_context(
+                            current_lap=lap,
+                            total_laps=self.num_laps,
+                            race_position=driver_pos,
+                            tyre_life=lap - sum(1 for pl in planned_pits if pl < lap),
+                            current_tyre=driver_result["tyre_sequence"][
+                                min(
+                                    sum(1 for pl in planned_pits if pl < lap),
+                                    len(driver_result["tyre_sequence"]) - 1,
+                                )
+                            ],
+                            is_wet=weather_effects.get(
+                                "track_condition", TrackCondition.DRY
+                            )
+                            != TrackCondition.DRY,
+                            rain_eta=None,
+                            is_sc_active=self.race_state.sc_active,
+                            is_vsc_active=self.race_state.vsc_active,
+                        )
+
+                        # Make pit stop decision
+                        pit_decision = strategist.on_pit_stop_decision(
+                            strategist.state.current_context,
+                            is_undercut=False,
+                        )
+
+                        if pit_decision:
+                            self.strategic_decisions.append(
+                                {
+                                    "lap": lap,
+                                    "decision_type": f"pit_timing_{team}",
+                                    "roll": pit_decision.get("roll"),
+                                    "outcome": pit_decision.get("outcome"),
+                                    "optimal_pit_lap": pit_decision.get(
+                                        "optimal_pit_lap"
+                                    ),
+                                    "modifier_total": pit_decision.get(
+                                        "modifier_total"
+                                    ),
+                                }
+                            )
+
+                            # Get the recommended pit lap from strategist
+                            recommended_pit_lap = pit_decision.get("optimal_pit_lap")
+
+                            # Adjust the pit lap if it's different from planned
+                            if (
+                                recommended_pit_lap
+                                and recommended_pit_lap != next_pit_lap
+                            ):
+                                # Modify the pit_laps list for this driver
+                                pit_idx = planned_pits.index(next_pit_lap)
+                                planned_pits[pit_idx] = recommended_pit_lap
+                                print(
+                                    f"  [STRATEGIST - {team}] Pit decision: Modified next pit from lap {next_pit_lap} to {recommended_pit_lap} (roll: {pit_decision.get('roll')}, outcome: {pit_decision.get('outcome')})"
+                                )
+                            else:
+                                print(
+                                    f"  [STRATEGIST - {team}] Pit decision: Stay with planned pit lap {next_pit_lap} (roll: {pit_decision.get('roll')}, outcome: {pit_decision.get('outcome')})"
+                                )
+
+                            self.team_last_pit_decision_lap[team] = lap
+
             for driver in self.driver_data:
                 # Skip DNFed drivers - they have retired from the race
                 if self.race_state.is_dnf(driver):
@@ -2048,13 +2791,43 @@ class EnhancedRaceSimulator:
                     1 for pl in driver_result["pit_laps"] if pl < lap
                 )
                 current_tyre = (
-                    driver_result[" tyre_sequence"][current_tyre_index]
-                    if current_tyre_index < len(driver_result[" tyre_sequence"])
+                    driver_result["tyre_sequence"][current_tyre_index]
+                    if current_tyre_index < len(driver_result["tyre_sequence"])
                     else "UNKNOWN"
                 )
                 lap_count_on_tyre = lap - sum(
                     1 for pl in driver_result["pit_laps"] if pl < lap
                 )
+
+                # Check for weather-triggered pit stop
+                should_pit_weather, pit_reason = self.should_pit_for_weather(
+                    driver, lap, current_tyre, weather_effects
+                )
+                if should_pit_weather and lap not in driver_result["pit_laps"]:
+                    # Add this as an extra pit stop
+                    driver_result["pit_laps"].append(lap)
+                    # Determine wet weather tyre
+                    recommended_tyre = weather_effects.get(
+                        "recommended_tyre", "intermediate"
+                    )
+                    if recommended_tyre == "wet":
+                        wet_tyre = "WET"
+                    elif recommended_tyre == "intermediate":
+                        wet_tyre = "INTERMEDIATE"
+                    else:
+                        wet_tyre = "MEDIUM"
+                    driver_result["tyre_sequence"].append(wet_tyre)
+                    self.race_state.last_weather_pit_decision[driver] = lap
+                    print(f"    {driver} pits for {wet_tyre} tyres - {pit_reason}")
+                    # Recalculate current tyre after weather pit
+                    current_tyre_index = sum(
+                        1 for pl in driver_result["pit_laps"] if pl < lap
+                    )
+                    current_tyre = (
+                        driver_result["tyre_sequence"][current_tyre_index]
+                        if current_tyre_index < len(driver_result["tyre_sequence"])
+                        else "UNKNOWN"
+                    )
 
                 # Calculate lap time
                 lap_result = self.simulate_lap(
@@ -2064,12 +2837,17 @@ class EnhancedRaceSimulator:
                     current_tyre=current_tyre,
                     lap_count_on_tyre=lap_count_on_tyre,
                     pit_laps=driver_result["pit_laps"],
-                    tyre_sequence=driver_result[" tyre_sequence"],
+                    tyre_sequence=driver_result["tyre_sequence"],
                     current_tyre_index=current_tyre_index,
                     start_delta=start_deltas.get(driver, 0.0),
                 )
 
                 lap_time = lap_result["lap_time"]
+
+                # Apply weather lap time modifier
+                weather_modifier = weather_effects.get("lap_time_modifier", 0.0)
+                if weather_modifier > 0:
+                    lap_time *= 1 + weather_modifier
 
                 # Apply safety car effects
                 if self.race_state.sc_active:
@@ -2118,6 +2896,61 @@ class EnhancedRaceSimulator:
 
         # Finalize results
         print(f"\n=== Race Complete ===")
+
+        # Print Strategic Decisions Summary
+        if self.strategic_decisions:
+            print(f"\n=== Strategic Decisions Summary ===")
+            print(f"  Total decisions: {len(self.strategic_decisions)}")
+
+            # Count by type
+            decision_types: Dict[str, int] = {}
+            successful = 0
+            failed = 0
+            partial = 0
+
+            for decision in self.strategic_decisions:
+                dec_type = decision.get("decision_type", "unknown")
+                decision_types[dec_type] = decision_types.get(dec_type, 0) + 1
+
+                outcome = decision.get("outcome", "")
+                if "success" in outcome.lower():
+                    successful += 1
+                elif "failure" in outcome.lower():
+                    failed += 1
+                elif "partial" in outcome.lower():
+                    partial += 1
+
+            print(f"  Decision Types:")
+            for dec_type, count in decision_types.items():
+                print(f"    - {dec_type}: {count}")
+
+            print(f"\n  Outcomes:")
+            print(f"    - Success: {successful}")
+            print(f"    - Partial Success: {partial}")
+            print(f"    - Failure: {failed}")
+
+            if successful + partial + failed > 0:
+                success_rate = (
+                    (successful + partial * 0.5) / (successful + partial + failed) * 100
+                )
+                print(f"\n  Overall Success Rate: {success_rate:.1f}%")
+
+            # Print key decisions
+            print(f"\n  Key Decisions:")
+            for decision in self.strategic_decisions[:10]:  # Show first 10
+                lap = decision.get("lap", "?")
+                dec_type = decision.get("decision_type", "unknown")
+                roll = decision.get("roll", "?")
+                outcome = decision.get("outcome", "unknown")
+                action = decision.get(
+                    "recommended_action", decision.get("selected_mode", "")
+                )
+                print(
+                    f"    Lap {lap}: {dec_type} - {action} (roll: {roll}, outcome: {outcome})"
+                )
+        else:
+            print(f"\n=== Strategic Decisions Summary ===")
+            print("  No strategic decisions recorded.")
 
         # Sort by final position
         final_results = sorted(results.items(), key=lambda x: x[1]["position"])

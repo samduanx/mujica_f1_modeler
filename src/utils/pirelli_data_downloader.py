@@ -252,7 +252,7 @@ def download_pirelli_data(year: int, output_file: str):
 def main():
     """Main function to download Pirelli data for multiple years."""
     # Download 2024 data
-    results_2024 = download_pirelli_data(2024, "pirelli_2024_data.json")
+    results_2024 = download_pirelli_data(2024, "data/pirelli_2024_data.json")
 
     time.sleep(2)
 

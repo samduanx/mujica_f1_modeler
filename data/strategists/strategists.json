@@ -1,0 +1,198 @@
+{
+    "strategists": [
+        {
+            "name": "Sakiko Togawa",
+            "team": "Ferrari",
+            "experience": 3,
+            "aggression": 0.6,
+            "conservatism": 0.4,
+            "intuition": 0.75,
+            "adaptability": 0.85,
+            "analytical": 0.8,
+            "communication": 0.9,
+            "wet_weather_skill": 0.7,
+            "tire_management": 0.8,
+            "undercut_skill": 0.65,
+            "pit_timing": 0.75,
+            "track_familiarity": {
+                "Monaco": 7,
+                "Monza": 8,
+                "Silverstone": 6
+            }
+        },
+        {
+            "name": "Hannah Foster",
+            "team": "Red Bull Racing",
+            "experience": 12,
+            "aggression": 0.75,
+            "conservatism": 0.3,
+            "intuition": 0.7,
+            "adaptability": 0.8,
+            "analytical": 0.9,
+            "communication": 0.7,
+            "wet_weather_skill": 0.8,
+            "tire_management": 0.85,
+            "undercut_skill": 0.9,
+            "pit_timing": 0.85,
+            "track_familiarity": {
+                "Monaco": 8,
+                "Silverstone": 10,
+                "Spa": 9,
+                "Monza": 10
+            }
+        },
+        {
+            "name": "Marcus Webb",
+            "team": "Mercedes",
+            "experience": 15,
+            "aggression": 0.5,
+            "conservatism": 0.6,
+            "intuition": 0.75,
+            "adaptability": 0.7,
+            "analytical": 0.85,
+            "communication": 0.8,
+            "wet_weather_skill": 0.7,
+            "tire_management": 0.8,
+            "undercut_skill": 0.75,
+            "pit_timing": 0.8,
+            "track_familiarity": {
+                "Silverstone": 12,
+                "Hungary": 10,
+                "Spa": 11
+            }
+        },
+        {
+            "name": "Pierre Dubois",
+            "team": "McLaren",
+            "experience": 5,
+            "aggression": 0.65,
+            "conservatism": 0.4,
+            "intuition": 0.6,
+            "adaptability": 0.85,
+            "analytical": 0.75,
+            "communication": 0.75,
+            "wet_weather_skill": 0.6,
+            "tire_management": 0.7,
+            "undercut_skill": 0.65,
+            "pit_timing": 0.7,
+            "track_familiarity": {
+                "Monaco": 5,
+                "Silverstone": 4
+            }
+        },
+        {
+            "name": "Sven Eriksson",
+            "team": "Aston Martin",
+            "experience": 18,
+            "aggression": 0.45,
+            "conservatism": 0.7,
+            "intuition": 0.8,
+            "adaptability": 0.65,
+            "analytical": 0.85,
+            "communication": 0.85,
+            "wet_weather_skill": 0.75,
+            "tire_management": 0.8,
+            "undercut_skill": 0.7,
+            "pit_timing": 0.75,
+            "track_familiarity": {
+                "Monaco": 15,
+                "Spa": 15,
+                "Monza": 14
+            }
+        },
+        {
+            "name": "Jean-Pierre Moreau",
+            "team": "Alpine",
+            "experience": 8,
+            "aggression": 0.55,
+            "conservatism": 0.5,
+            "intuition": 0.55,
+            "adaptability": 0.6,
+            "analytical": 0.7,
+            "communication": 0.65,
+            "wet_weather_skill": 0.5,
+            "tire_management": 0.65,
+            "undercut_skill": 0.6,
+            "pit_timing": 0.65,
+            "track_familiarity": {
+                "Monaco": 6,
+                "France": 8
+            }
+        },
+        {
+            "name": "Dave Harrison",
+            "team": "Williams",
+            "experience": 20,
+            "aggression": 0.4,
+            "conservatism": 0.75,
+            "intuition": 0.7,
+            "adaptability": 0.55,
+            "analytical": 0.8,
+            "communication": 0.7,
+            "wet_weather_skill": 0.7,
+            "tire_management": 0.75,
+            "undercut_skill": 0.6,
+            "pit_timing": 0.7,
+            "track_familiarity": {
+                "Silverstone": 18,
+                "Monaco": 10
+            }
+        },
+        {
+            "name": "Kenji Yamamoto",
+            "team": "AlphaTauri",
+            "experience": 3,
+            "aggression": 0.7,
+            "conservatism": 0.35,
+            "intuition": 0.5,
+            "adaptability": 0.8,
+            "analytical": 0.65,
+            "communication": 0.55,
+            "wet_weather_skill": 0.45,
+            "tire_management": 0.55,
+            "undercut_skill": 0.5,
+            "pit_timing": 0.55,
+            "track_familiarity": {
+                "Monaco": 2,
+                "Italy": 3
+            }
+        },
+        {
+            "name": "Raffaele Bianchi",
+            "team": "Alfa Romeo",
+            "experience": 14,
+            "aggression": 0.5,
+            "conservatism": 0.6,
+            "intuition": 0.65,
+            "adaptability": 0.6,
+            "analytical": 0.75,
+            "communication": 0.7,
+            "wet_weather_skill": 0.65,
+            "tire_management": 0.7,
+            "undercut_skill": 0.65,
+            "pit_timing": 0.7,
+            "track_familiarity": {
+                "Monaco": 12,
+                "Italy": 14
+            }
+        },
+        {
+            "name": "Tom Martinez",
+            "team": "Haas",
+            "experience": 4,
+            "aggression": 0.6,
+            "conservatism": 0.4,
+            "intuition": 0.45,
+            "adaptability": 0.7,
+            "analytical": 0.6,
+            "communication": 0.5,
+            "wet_weather_skill": 0.4,
+            "tire_management": 0.5,
+            "undercut_skill": 0.45,
+            "pit_timing": 0.5,
+            "track_familiarity": {
+                "Silverstone": 3
+            }
+        }
+    ]
+}

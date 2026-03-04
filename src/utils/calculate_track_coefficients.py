@@ -329,7 +329,7 @@ def main():
             )
 
     # Write results to CSV
-    output_path = Path("docs/track_coefficients_fastf1.csv")
+    output_path = Path("data/track_coefficients_fastf1.csv")
 
     with open(output_path, "w", newline="") as f:
         writer = csv.writer(f)

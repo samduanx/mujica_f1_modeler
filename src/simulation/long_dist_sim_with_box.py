@@ -484,41 +484,40 @@ def get_track_characteristics():
 TRACK_BASE_LAP_TIMES = {
     # Track: (Race pace base lap time, R-value reference)
     # Formula: base_lap = TRACK_BASE - (R_Value - 300) * 0.03
-    
     # 2024-2025 FastF1 calibrated values (multi-year average where available)
-    
     # High-speed tracks
-    "Italy": (86.5, 300),       # Monza - FastF1: ~86.5s
-    "Bahrain": (97.8, 300),     # FastF1 multi-year: 97.776s
-    "Saudi Arabia": (96.2, 300), # FastF1 multi-year: 94.767s
-    "Belgium": (102.3, 300),    # Spa - FastF1: 102.0s (was 112.7)
-    "Austria": (70.7, 300),     # Red Bull Ring - FastF1: ~70.7s
-    
+    "Italy": (86.5, 300),  # Monza - FastF1: ~86.5s
+    "Bahrain": (97.8, 300),  # FastF1 multi-year: 97.776s
+    "Saudi Arabia": (96.2, 300),  # FastF1 multi-year: 94.767s
+    "Belgium": (102.3, 300),  # Spa - FastF1: 102.0s (was 112.7)
+    "Austria": (70.7, 300),  # Red Bull Ring - FastF1: ~70.7s
     # Street circuits
-    "Monaco": (79.6, 300),      # Monte Carlo - FastF1: 79.6s (2023: 79.8s, 2024: 79.5s)
+    "Monaco": (79.6, 300),  # Monte Carlo - FastF1: 79.6s (2023: 79.8s, 2024: 79.5s)
     "Singapore": (110.1, 300),  # Marina Bay - FastF1: ~109.8s multi-year avg
-    "Azerbaijan": (108.3, 300),  # Baku Street - FastF1: 108.2s (2023: 107.3s, 2024: 109.0s)
-    "Miami": (93.0, 300),        # Hard Rock Stadium - FastF1: ~93.0s
-    "Las Vegas": (98.7, 300),   # Street Circuit - FastF1 multi-year: 98.7s
-    
+    "Azerbaijan": (
+        108.3,
+        300,
+    ),  # Baku Street - FastF1: 108.2s (2023: 107.3s, 2024: 109.0s)
+    "Miami": (93.0, 300),  # Hard Rock Stadium - FastF1: ~93.0s
+    "Las Vegas": (98.7, 300),  # Street Circuit - FastF1 multi-year: 98.7s
     # Technical tracks
-    "Spain": (89.0, 300),       # Circuit de Barcelona - FastF1: 88.9s (reference track)
-    "Hungary": (79.6, 300),     # Hungaroring - FastF1: 79.3s (was 84.4)
-    "France": (91.5, 300),      # Paul Ricard - FastF1: 91.2s (was 98.8)
-    
+    "Spain": (89.0, 300),  # Circuit de Barcelona - FastF1: 88.9s (reference track)
+    "Hungary": (79.6, 300),  # Hungaroring - FastF1: 79.3s (was 84.4)
+    "France": (91.5, 300),  # Paul Ricard - FastF1: 91.2s (was 98.8)
     # Medium-length tracks
-    "Silverstone": (93.3, 300), # British GP - FastF1: ~93.3s
-    "Netherlands": (76.6, 300), # Zandvoort - FastF1: ~76.6s
-    "Brazil": (73.3, 300),      # Interlagos - FastF1: 73.0s (was 76.4)
-    "Canada": (80.8, 300),      # Gilles Villeneuve - FastF1: 80.5s (was 83.5)
-    "Japan": (97.5, 300),       # Suzuka - FastF1: 97.41s (2024 race pace)
-    "Abu Dhabi": (90.3, 300),   # Yas Marina - FastF1: 90.0s (was 93.0)
-    
+    "Silverstone": (93.3, 300),  # British GP - FastF1: ~93.3s
+    "Netherlands": (76.6, 300),  # Zandvoort - FastF1: ~76.6s
+    "Brazil": (73.3, 300),  # Interlagos - FastF1: 73.0s (was 76.4)
+    "Canada": (80.8, 300),  # Gilles Villeneuve - FastF1: 80.5s (was 83.5)
+    "Japan": (97.5, 300),  # Suzuka - FastF1: 97.41s (2024 race pace)
+    "Abu Dhabi": (90.3, 300),  # Yas Marina - FastF1: 90.0s (was 93.0)
     # Updated entries with FastF1 calibration
-    "Qatar": (88.4, 300),       # Lusail - FastF1: 88.447s
-    "Mexico": (84.2, 300),       # Rodriguez - FastF1: 83.9s (was 79.3)
-    "China": (99.8, 300),       # Shanghai - FastF1 multi-year: 99.8s (2024: 101.9s, 2025: 97.7s)
-    
+    "Qatar": (88.4, 300),  # Lusail - FastF1: 88.447s
+    "Mexico": (84.2, 300),  # Rodriguez - FastF1: 83.9s (was 79.3)
+    "China": (
+        99.8,
+        300,
+    ),  # Shanghai - FastF1 multi-year: 99.8s (2024: 101.9s, 2025: 97.7s)
     # Track name aliases for flexibility
     "Great Britain": (93.3, 300),  # Silverstone
     "Great_Britain": (93.3, 300),
@@ -527,18 +526,17 @@ TRACK_BASE_LAP_TIMES = {
     "Abu_Dhabi": (93.0, 300),
     "Saudi_Arabia": (96.2, 300),
     "SaudiArabia": (96.2, 300),
-    
-    "default": (88.0, 300),    # Fallback for unknown tracks
+    "default": (88.0, 300),  # Fallback for unknown tracks
 }
 
 
 def get_track_base_lap(track_name: str) -> float:
     """
     Get the base lap time for a track.
-    
+
     Args:
         track_name: Name of the track (case-insensitive, with alias support)
-    
+
     Returns:
         Base lap time in seconds
     """
@@ -594,55 +592,55 @@ def get_track_base_lap(track_name: str) -> float:
         "austria": "Austria",
         "redbullring": "Austria",
     }
-    
+
     # Normalize track name
     normalized_name = track_name.lower().replace(" ", "").replace("_", "")
-    
+
     # Check if this is an alias
     if normalized_name in track_aliases:
         canonical_name = track_aliases[normalized_name]
         if canonical_name in TRACK_BASE_LAP_TIMES:
             return TRACK_BASE_LAP_TIMES[canonical_name][0]
-    
+
     # Try exact match first
     track_key = normalized_name
     if track_key in TRACK_BASE_LAP_TIMES:
         return TRACK_BASE_LAP_TIMES[track_key][0]
-    
+
     # Try partial matches
     for track, (base_lap, _) in TRACK_BASE_LAP_TIMES.items():
         track_lower = track.lower().replace(" ", "").replace("_", "")
         if track_lower in normalized_name or normalized_name in track_lower:
             return base_lap
-    
+
     return TRACK_BASE_LAP_TIMES["default"][0]
 
 
 def calculate_base_lap_time(driver_r_value: float, track_name: str) -> float:
     """
     Calculate base lap time for a driver on a specific track.
-    
+
     Formula:
         base_lap = TRACK_BASE - (R_Value - 300) * 0.03
-    
+
     Where:
         - TRACK_BASE is the track-specific base lap time
         - R_Value is the driver's R-value
         - 0.03s per R-value point (reduced from 0.05 for better calibration)
-    
+
     Args:
         driver_r_value: Driver's R-value
         track_name: Name of the track
-    
+
     Returns:
         Base lap time in seconds
     """
     track_base = get_track_base_lap(track_name)
-    
+
     # Calculate time difference based on R-value
     # Higher R-value = faster lap
     r_adjustment = (driver_r_value - 300) * 0.03
-    
+
     return track_base - r_adjustment
 
 
@@ -1344,7 +1342,9 @@ def read_driver_data(csv_file):
             candidate_paths.append(csv_file)
             candidate_paths.append(os.path.join("tables", csv_file))
 
-        csv_path = next((path for path in candidate_paths if os.path.exists(path)), None)
+        csv_path = next(
+            (path for path in candidate_paths if os.path.exists(path)), None
+        )
         if csv_path is None:
             raise FileNotFoundError(f"CSV file not found: {csv_file}")
 
@@ -1385,22 +1385,20 @@ def calculate_dr_based_std(dr_value, dr_min, dr_max, base_std):
 def load_pit_stop_data():
     """Load pit stop data"""
     try:
-        df = pd.read_csv("outputs/tables/pit_stop_analysis_by_strategy_2022_2024.csv")
+        df = pd.read_csv("data/pit_stop_strategies_2022_2024.csv")
         return df
     except FileNotFoundError:
-        print(
-            "Pit stop data file not found: outputs/tables/pit_stop_analysis_by_strategy_2022_2024.csv"
-        )
+        print("Pit stop data file not found: data/pit_stop_strategies_2022_2024.csv")
         return None
 
 
 def load_pitlane_time_data():
     """Load pitlane time data from pitlane_time.csv"""
     try:
-        df = pd.read_csv("outputs/tables/pitlane_time.csv")
+        df = pd.read_csv("data/pitlane_time.csv")
         return df
     except FileNotFoundError:
-        print("Pitlane time data file not found: outputs/tables/pitlane_time.csv")
+        print("Pitlane time data file not found: data/pitlane_time.csv")
         return None
 
 
@@ -2060,10 +2058,7 @@ def simulate_race_with_pit_stops(
 
         # Calculate base lap time using track-specific formula
         # Uses the new TRACK_BASE_LAP_TIMES configuration
-        base_lap_time = calculate_base_lap_time(
-            driver_info["R_Value"],
-            track_name
-        )
+        base_lap_time = calculate_base_lap_time(driver_info["R_Value"], track_name)
 
         # Tire degradation
         degradation = calculate_degradation_with_cliff(
@@ -2440,15 +2435,19 @@ def main(argv=None):
             # Find drivers with fastest and slowest stops
             fastest_event = min(
                 all_pit_events,
-                key=lambda x: x.get("pit_time", float("inf"))
-                if isinstance(x.get("pit_time"), (int, float))
-                else float("inf"),
+                key=lambda x: (
+                    x.get("pit_time", float("inf"))
+                    if isinstance(x.get("pit_time"), (int, float))
+                    else float("inf")
+                ),
             )
             slowest_event = max(
                 all_pit_events,
-                key=lambda x: x.get("pit_time", 0)
-                if isinstance(x.get("pit_time"), (int, float))
-                else 0,
+                key=lambda x: (
+                    x.get("pit_time", 0)
+                    if isinstance(x.get("pit_time"), (int, float))
+                    else 0
+                ),
             )
 
             print(f"Total pit stops across all drivers: {total_pits}")

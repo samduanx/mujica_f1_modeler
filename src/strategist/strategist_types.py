@@ -1,0 +1,449 @@
+"""
+Strategist Types Module
+
+Defines all core data structures for the Strategist System including:
+- StrategistProfile: Stats and attributes for a race strategist
+- StrategyDecision: Container for strategy decision outcomes
+- RaceContext: Current race state for decision-making
+- DecisionType: Enum for different strategy decision types
+- DriverComplianceLevel: Enum for driver compliance levels
+- PaceMode: Enum for racing pace modes
+"""
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Optional, Dict
+
+
+class DecisionType(Enum):
+    """Types of strategy decisions a strategist can make."""
+
+    PIT_TIMING = "pit_timing"
+    TYRE_COMPOUND = "tyre_compound"
+    RACING_PACE = "racing_pace"
+    WEATHER_RESPONSE = "weather_response"
+    SAFETY_CAR_RESPONSE = "safety_car_response"
+    UNDERCUT_ATTEMPT = "undercut_attempt"
+    TEAM_ORDER = "team_order"
+
+
+class DriverComplianceLevel(Enum):
+    """Levels of driver compliance with strategist instructions."""
+
+    PERFECT = "perfect"  # Executes flawlessly with enthusiasm
+    FULL = "full"  # Follows instructions exactly
+    PARTIAL = "partial"  # Follows with minor adaptation
+    SUGGESTION = "suggestion"  # Takes as advice, may modify
+    RESISTANCE = "resistance"  # Reluctant compliance
+    OVERRIDE = "override"  # Completely disregards advice
+
+
+class PaceMode(Enum):
+    """Racing pace modes available to strategists."""
+
+    PUSH = "push"  # 100% speed, 150% tire wear, 120% fuel
+    RACE = "race"  # 95% speed, 100% tire wear, 100% fuel
+    MANAGE = "manage"  # 90% speed, 70% tire wear, 85% fuel
+    SAVE = "save"  # 85% speed, 50% tire wear, 70% fuel
+    LIFT_AND_COAST = "lift_and_coast"  # 80% speed, 40% tire wear, 50% fuel
+
+
+class OutcomeLevel(Enum):
+    """Outcome levels for dice roll results."""
+
+    CRITICAL_FAILURE = "critical_failure"  # Natural 1
+    FAILURE = "failure"  # 2-5
+    PARTIAL_SUCCESS = "partial_success"  # 6-10
+    SUCCESS = "success"  # 11-15
+    GREAT_SUCCESS = "great_success"  # 16-19
+    CRITICAL_SUCCESS = "critical_success"  # Natural 20
+
+
+@dataclass
+class StrategistProfile:
+    """
+    Profile for a race strategist with all their attributes and stats.
+
+    Attributes:
+        name: Strategist's name
+        team: F1 team the strategist works for
+        experience: Years of experience (affects modifier)
+        aggression: 0.0-1.0, affects risk-taking decisions
+        conservatism: 0.0-1.0, affects defensive strategy
+        intuition: 0.0-1.0, affects gut-feeling calls
+        adaptability: 0.0-1.0, affects response to changing conditions
+        analytical: 0.0-1.0, affects data-driven decisions
+        communication: 0.0-1.0, affects driver/team relations
+        wet_weather_skill: 0.0-1.0, affects wet weather decisions
+        tire_management: 0.0-1.0, affects tyre strategy
+        undercut_skill: 0.0-1.0, affects undercut attempts
+        pit_timing: 0.0-1.0, affects pit stop timing
+        track_familiarity: Dict mapping track names to familiarity level (races)
+    """
+
+    name: str
+    team: str
+    experience: int = 0  # Years of experience
+
+    # Core attributes (0.0-1.0)
+    aggression: float = 0.5
+    conservatism: float = 0.5
+    intuition: float = 0.5
+    adaptability: float = 0.5
+    analytical: float = 0.5
+    communication: float = 0.5
+
+    # Specialized skills (0.0-1.0)
+    wet_weather_skill: float = 0.5
+    tire_management: float = 0.5
+    undercut_skill: float = 0.5
+    pit_timing: float = 0.5
+
+    # Track familiarity: track_name -> number of races
+    track_familiarity: Dict[str, int] = field(default_factory=dict)
+
+    # Runtime state
+    successful_decisions: int = 0
+    failed_decisions: int = 0
+
+    def get_experience_modifier(self) -> int:
+        """Calculate experience modifier based on years of experience."""
+        if self.experience <= 2:
+            return 0  # Rookie
+        elif self.experience <= 5:
+            return 1  # Junior
+        elif self.experience <= 9:
+            return 2  # Experienced
+        elif self.experience <= 14:
+            return 3  # Senior
+        else:
+            return 4  # Veteran
+
+    def get_attribute_modifier(self, attribute_value: float) -> int:
+        """
+        Convert attribute value (0.0-1.0) to modifier.
+
+        | Attribute Value | Modifier |
+        | 0.0-0.25       | -2       |
+        | 0.26-0.40      | -1       |
+        | 0.41-0.60      | 0        |
+        | 0.61-0.75      | +1       |
+        | 0.76-0.90      | +2       |
+        | 0.91-1.00      | +3       |
+        """
+        if attribute_value <= 0.25:
+            return -2
+        elif attribute_value <= 0.40:
+            return -1
+        elif attribute_value <= 0.60:
+            return 0
+        elif attribute_value <= 0.75:
+            return 1
+        elif attribute_value <= 0.90:
+            return 2
+        else:
+            return 3
+
+    def get_track_familiarity_bonus(self, track_name: str) -> int:
+        """Calculate track familiarity bonus."""
+        races = self.track_familiarity.get(track_name, 0)
+        if races == 0:
+            return 0
+        elif races <= 2:
+            return 1
+        elif races <= 5:
+            return 2
+        else:
+            return 3
+
+    def get_aggression_modifier(self) -> int:
+        """Get modifier from aggression attribute."""
+        return self.get_attribute_modifier(self.aggression)
+
+    def get_conservatism_modifier(self) -> int:
+        """Get modifier from conservatism attribute."""
+        return self.get_attribute_modifier(self.conservatism)
+
+    def get_intuition_modifier(self) -> int:
+        """Get modifier from intuition attribute."""
+        return self.get_attribute_modifier(self.intuition)
+
+    def get_adaptability_modifier(self) -> int:
+        """Get modifier from adaptability attribute."""
+        return self.get_attribute_modifier(self.adaptability)
+
+    def get_analytical_modifier(self) -> int:
+        """Get modifier from analytical attribute."""
+        return self.get_attribute_modifier(self.analytical)
+
+    def get_communication_modifier(self) -> int:
+        """Get modifier from communication attribute."""
+        return self.get_attribute_modifier(self.communication)
+
+    def get_wet_weather_modifier(self) -> int:
+        """Get modifier from wet weather skill (x1.5 multiplier for decisions)."""
+        base_mod = self.get_attribute_modifier(self.wet_weather_skill)
+        return int(base_mod * 1.5)
+
+    def get_tire_management_modifier(self) -> int:
+        """Get modifier from tire management skill."""
+        return self.get_attribute_modifier(self.tire_management)
+
+    def get_undercut_modifier(self) -> int:
+        """Get modifier from undercut skill (x1.5 multiplier for decisions)."""
+        base_mod = self.get_attribute_modifier(self.undercut_skill)
+        return int(base_mod * 1.5)
+
+    def get_pit_timing_modifier(self) -> int:
+        """Get modifier from pit timing skill."""
+        return self.get_attribute_modifier(self.pit_timing)
+
+
+@dataclass
+class StrategyDecision:
+    """
+    Container for a strategy decision made by a strategist.
+
+    Attributes:
+        decision_type: Type of decision made
+        roll: The raw dice roll (1d20)
+        modifier: Total modifier applied
+        final_value: roll + modifier
+        outcome: Outcome level (critical failure to critical success)
+        description: Human-readable description of the decision
+        time_impact: Time impact in seconds (positive = slower)
+        position_impact: Position impact (positive = gained positions)
+        special_effects: Any special effects from the decision
+    """
+
+    decision_type: DecisionType
+    roll: int
+    modifier: int
+    final_value: int
+    outcome: OutcomeLevel
+    description: str
+    time_impact: float = 0.0  # seconds
+    position_impact: int = 0  # positions
+    special_effects: Dict[str, any] = field(default_factory=dict)
+
+    def is_success(self) -> bool:
+        """Check if the decision was successful (partial success or better)."""
+        return self.outcome in (
+            OutcomeLevel.PARTIAL_SUCCESS,
+            OutcomeLevel.SUCCESS,
+            OutcomeLevel.GREAT_SUCCESS,
+            OutcomeLevel.CRITICAL_SUCCESS,
+        )
+
+    def is_failure(self) -> bool:
+        """Check if the decision was a failure."""
+        return self.outcome in (OutcomeLevel.FAILURE, OutcomeLevel.CRITICAL_FAILURE)
+
+
+@dataclass
+class RaceContext:
+    """
+    Current race state for making strategy decisions.
+
+    Attributes:
+        track_name: Current track
+        current_lap: Current race lap
+        total_laps: Total race laps
+        is_wet: Whether track is wet
+        rain_intensity: Rain intensity (0-100)
+        rain_eta: Estimated laps until rain (None if no rain expected)
+        is_sc_active: Whether Safety Car is active
+        is_vsc_active: Whether Virtual Safety Car is active
+        race_position: Current race position
+        pit_stops_completed: Number of pit stops completed
+        current_tyre: Current tyre compound
+        tyre_life: Laps remaining on current tyre
+        fuel_level: Fuel remaining (percentage)
+        driver_trust: Driver's trust level (0.0-1.0)
+        championship_leading: Whether in championship contention
+        pressure_level: Current pressure level (0=none, 3=extreme)
+    """
+
+    track_name: str = "Unknown"
+    current_lap: int = 1
+    total_laps: int = 78
+
+    # Weather conditions
+    is_wet: bool = False
+    rain_intensity: int = 0
+    rain_eta: Optional[int] = None  # Laps until rain
+
+    # Race control
+    is_sc_active: bool = False
+    is_vsc_active: bool = False
+
+    # Car state
+    race_position: int = 20
+    pit_stops_completed: int = 0
+    current_tyre: str = "SOFT"
+    tyre_life: int = 20  # Laps remaining
+    fuel_level: float = 100.0  # Percentage
+
+    # Driver relationship
+    driver_trust: float = 0.5  # 0.0-1.0
+
+    # Championship context
+    championship_leading: bool = False
+    pressure_level: int = 0  # 0=none, 1=normal, 2=high, 3=extreme
+
+
+@dataclass
+class ComplianceCheck:
+    """
+    Result of a driver compliance check.
+
+    Attributes:
+        roll: The raw dice roll (1d20)
+        modifier: Total modifier applied
+        final_value: roll + modifier
+        outcome: Compliance level achieved
+        effectiveness: Strategy effectiveness multiplier
+    """
+
+    roll: int
+    modifier: int
+    final_value: int
+    outcome: DriverComplianceLevel
+    effectiveness: float = 1.0
+
+    @staticmethod
+    def get_effectiveness(level: DriverComplianceLevel) -> float:
+        """Get effectiveness multiplier for compliance level."""
+        effectiveness_map = {
+            DriverComplianceLevel.PERFECT: 1.20,
+            DriverComplianceLevel.FULL: 1.00,
+            DriverComplianceLevel.PARTIAL: 0.85,
+            DriverComplianceLevel.SUGGESTION: 0.70,
+            DriverComplianceLevel.RESISTANCE: 0.50,
+            DriverComplianceLevel.OVERRIDE: 0.00,
+        }
+        return effectiveness_map.get(level, 1.0)
+
+
+# Helper functions for outcome determination
+
+
+def determine_outcome(roll: int, final_value: int) -> OutcomeLevel:
+    """
+    Determine outcome level from roll and final value.
+
+    Criticals are determined by raw roll (1 or 20),
+    other outcomes by final value.
+    """
+    if roll == 1:
+        return OutcomeLevel.CRITICAL_FAILURE
+    elif roll == 20:
+        return OutcomeLevel.CRITICAL_SUCCESS
+    elif final_value <= 5:
+        return OutcomeLevel.FAILURE
+    elif final_value <= 10:
+        return OutcomeLevel.PARTIAL_SUCCESS
+    elif final_value <= 15:
+        return OutcomeLevel.SUCCESS
+    elif final_value <= 19:
+        return OutcomeLevel.GREAT_SUCCESS
+    else:
+        return OutcomeLevel.CRITICAL_SUCCESS
+
+
+def determine_compliance_outcome(roll: int, final_value: int) -> DriverComplianceLevel:
+    """
+    Determine compliance level from roll and final value.
+    """
+    if roll == 1:
+        return DriverComplianceLevel.OVERRIDE
+    elif roll == 20:
+        return DriverComplianceLevel.PERFECT
+    elif final_value <= 5:
+        return DriverComplianceLevel.RESISTANCE
+    elif final_value <= 10:
+        return DriverComplianceLevel.SUGGESTION
+    elif final_value <= 15:
+        return DriverComplianceLevel.PARTIAL
+    elif final_value <= 19:
+        return DriverComplianceLevel.FULL
+    else:
+        return DriverComplianceLevel.PERFECT
+
+
+# F1 Track data for realistic strategy decisions
+
+TRACK_PIT_LOSS = {
+    "Bahrain": 22.5,
+    "Jeddah": 23.0,
+    "Australia": 21.5,
+    "China": 21.0,
+    "Miami": 22.0,
+    "Monaco": 25.0,  # Very slow pit lane
+    "Canada": 20.5,
+    "Spain": 21.0,
+    "Austria": 21.0,
+    "Great Britain": 21.5,
+    "Hungary": 22.0,
+    "Belgium": 21.0,
+    "Netherlands": 21.5,
+    "Italy": 22.5,  # Very fast pit lane at Monza
+    "Singapore": 25.0,  # Slow pit lane
+    "Japan": 21.0,
+    "Qatar": 22.0,
+    "United States": 22.0,
+    "Mexico": 22.5,
+    "Brazil": 22.0,
+    "Las Vegas": 23.0,
+    "Abu Dhabi": 22.0,
+}
+
+TRACK_OVERTAKING_DIFFICULTY = {
+    "Bahrain": "medium",
+    "Jeddah": "high",
+    "Australia": "medium",
+    "China": "high",
+    "Miami": "high",
+    "Monaco": "very_low",  # Almost impossible to overtake
+    "Canada": "high",
+    "Spain": "medium",
+    "Austria": "high",
+    "Great Britain": "high",
+    "Hungary": "low",
+    "Belgium": "high",  # Eau Rouge
+    "Netherlands": "medium",
+    "Italy": "very_high",  # Monza - easiest to overtake
+    "Singapore": "very_low",  # Street circuit
+    "Japan": "medium",
+    "Qatar": "high",
+    "United States": "high",
+    "Mexico": "high",
+    "Brazil": "high",
+    "Las Vegas": "high",
+    "Abu Dhabi": "medium",
+}
+
+TRACK_UNDERCUT_DIFFICULTY = {
+    "Bahrain": 0,
+    "Jeddah": 0,
+    "Australia": -1,
+    "China": 0,
+    "Miami": 0,
+    "Monaco": -2,  # Very hard to undercut
+    "Canada": 0,
+    "Spain": -1,
+    "Austria": 0,
+    "Great Britain": 0,
+    "Hungary": -1,
+    "Belgium": 0,
+    "Netherlands": -1,
+    "Italy": 0,  # Easy to undercut at Monza
+    "Singapore": -3,  # Very hard to undercut
+    "Japan": -1,
+    "Qatar": 0,
+    "United States": 0,
+    "Mexico": 0,
+    "Brazil": 0,
+    "Las Vegas": 0,
+    "Abu Dhabi": -1,
+}

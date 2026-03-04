@@ -210,7 +210,7 @@ def generate_track_csv():
 
     df = pd.DataFrame(rows)
 
-    output_path = "docs/track_characteristics.csv"
+    output_path = "data/track_characteristics.csv"
     df.to_csv(output_path, index=False)
     print(f"Generated: {output_path}")
     print(f"Total tracks: {len(df)}")

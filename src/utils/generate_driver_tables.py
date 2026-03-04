@@ -1,7 +1,7 @@
 """
 Driver table generator with Piastri/Ricciardo substitution logic.
 
-Generates track-specific driver lineup CSV files from docs/driver_ratings.csv.
+Generates track-specific driver lineup CSV files from data/driver_ratings.csv.
 
 Substitution Rule:
 - Before/during Spain GP: Piastri in McLaren, Ricciardo not racing
@@ -69,7 +69,7 @@ DEFAULT_TRACK_COEFFS = {
 }
 
 
-def load_track_coefficients(track_csv_path="docs/track_characteristics.csv"):
+def load_track_coefficients(track_csv_path="data/track_characteristics.csv"):
     """
     Load track coefficients from CSV.
 
@@ -102,7 +102,7 @@ def load_track_coefficients(track_csv_path="docs/track_characteristics.csv"):
     return track_coeffs
 
 
-def load_team_parameters(team_csv_path="docs/spain_team.csv"):
+def load_team_parameters(team_csv_path="data/spain_team.csv"):
     """
     Load team parameters from CSV.
 
@@ -232,7 +232,7 @@ F1_2022_CALENDAR = [
 PIASTRI_TRACKS = set(F1_2022_CALENDAR[: F1_2022_CALENDAR.index("Spain") + 1])
 
 
-def load_driver_ratings(csv_path="docs/driver_ratings.csv"):
+def load_driver_ratings(csv_path="data/driver_ratings.csv"):
     """
     Load driver ratings from CSV file with Chinese headers.
 
