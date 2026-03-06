@@ -540,12 +540,13 @@ def run_drs_simulation(
 
 # Example usage
 if __name__ == "__main__":
-    # Import configurations
-    from zones.monaco_2024 import get_config, get_validation_targets
+    # Import configurations from new JSON-based zones module
+    from drs.zones import get_monaco_config as get_config
 
     # Get Monaco configuration
     config = get_config()
-    targets = get_validation_targets()
+    # Validation targets are now embedded in the JSON config
+    targets = config.get("validation_targets", {})
 
     # Get test drivers
     from driver_state import TEST_DRIVERS

@@ -49,7 +49,7 @@ python main.py --gp-name 大奖赛名称
 - [ ] 自由练习 | Free Practice sessions
 - [ ] 排位赛（含冲刺排位） | Qualifying sessions (incl. Sprint Qualifiers)
 - [ ] 冲刺赛 | Sprint sessions
-- [ ] 正赛 | Races
+- [x] 正赛 | Races
   - [x] 进站模拟 | Pit stop simulations
   - [x] 发车模拟 | Grid and start simulations
   - [x] 斗车、超车、DRS模拟 | Simulations of car battling, overtaking, and DRS usage
@@ -58,11 +58,14 @@ python main.py --gp-name 大奖赛名称
   - [x] 天气系统 | Weathering system
   - [x] 蓝旗（套圈）处理 | Simulation of lapping (blue flags)
   - [x] 策略工程师模式 | Strategist mode
-  - [ ] 车手技能系统 | Driver skills system
+  - [x] 车手技能系统 | Driver skills system
 - [ ] 赛后内容 | After-race info
   - [x] 赛事记录文档（含骰点）导出方法 | Exports of race records (including dice rolls)
   - [ ] 积分榜 | Leaderboards
+    - [ ] 比赛名次读取 | Reading race results
+    - [ ] 正赛最快圈提取 | Extracting the fastest lap in a race
   - [ ] 罚分处理 | Penalty processing and point calculations
+    - [ ] 提取比赛信息 | Extracting race info
   - [ ] 预算帽计算方法移植 | Porting the cost cap system
   - [ ] 套件更换与处罚计算 | Modeling of sanctioned part replacements and related penalties
 - Bonus

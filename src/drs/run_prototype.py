@@ -9,8 +9,7 @@ import sys
 
 sys.path.insert(0, "src")
 
-from drs.zones.monaco_2024 import get_config as get_monaco_config
-from drs.zones.monza_2024 import get_config as get_monza_config
+from drs.zones import get_monaco_config, get_monza_config
 from drs.driver_state import TEST_DRIVERS
 from drs.simulator import (
     TimeSteppedDRSSimulator,

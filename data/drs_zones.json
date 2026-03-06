@@ -1,0 +1,1242 @@
+{
+    "Australia": {
+        "track_name": "Australia",
+        "year": 2024,
+        "total_distance": 5303,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1400,
+                "base_time": 24.5,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 850,
+                        "end_distance": 1250,
+                        "detection_point": 700,
+                        "base_time_gain": 0.08,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1400,
+                "end_distance": 3300,
+                "base_time": 31.2,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 3100,
+                        "end_distance": 3600,
+                        "detection_point": 2900,
+                        "base_time_gain": 0.10,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 3300,
+                "end_distance": 5303,
+                "base_time": 26.8,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 82.5,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.18,
+            "track_difficulty": "medium"
+        }
+    },
+    "Bahrain": {
+        "track_name": "Bahrain",
+        "year": 2024,
+        "total_distance": 5412,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.05,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1500,
+                "base_time": 28.9,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 750,
+                        "end_distance": 1470,
+                        "detection_point": 550,
+                        "base_time_gain": 0.18,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1500,
+                "end_distance": 3600,
+                "base_time": 38.6,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 3250,
+                        "end_distance": 4050,
+                        "detection_point": 3050,
+                        "base_time_gain": 0.20,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 3600,
+                "end_distance": 5412,
+                "base_time": 22.5,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 90.0,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.75,
+            "track_difficulty": "medium"
+        }
+    },
+    "China": {
+        "track_name": "China",
+        "year": 2024,
+        "total_distance": 5450,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 2000,
+                "base_time": 26.5,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 1200,
+                        "end_distance": 1800,
+                        "detection_point": 1000,
+                        "base_time_gain": 0.12,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 2000,
+                "end_distance": 4200,
+                "base_time": 30.5,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 4000,
+                        "end_distance": 4600,
+                        "detection_point": 3800,
+                        "base_time_gain": 0.20,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 4200,
+                "end_distance": 5450,
+                "base_time": 28.0,
+                "corner_complexity": "high",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 85.0,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.32,
+            "track_difficulty": "medium"
+        }
+    },
+    "Imola": {
+        "track_name": "Imola",
+        "year": 2024,
+        "total_distance": 4909,
+        "difficulty": "high",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.02,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1800,
+                "base_time": 25.5,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 0,
+                        "end_distance": 600,
+                        "detection_point": 4900,
+                        "base_time_gain": 0.12,
+                        "activation_probability": 0.75
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1800,
+                "end_distance": 3500,
+                "base_time": 30.5,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 2800,
+                        "end_distance": 3300,
+                        "detection_point": 2600,
+                        "base_time_gain": 0.10,
+                        "activation_probability": 0.70
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 3500,
+                "end_distance": 4909,
+                "base_time": 24.5,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 80.5,
+            "lap_time_tolerance": 1.5,
+            "drs_gain_target": 0.22,
+            "track_difficulty": "hard"
+        }
+    },
+    "Monaco": {
+        "track_name": "Monaco",
+        "year": 2024,
+        "total_distance": 3337,
+        "difficulty": "low",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1100,
+                "base_time": 18.6,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 450,
+                        "end_distance": 700,
+                        "detection_point": 280,
+                        "base_time_gain": 0.03,
+                        "activation_probability": 0.80
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1100,
+                "end_distance": 2100,
+                "base_time": 33.6,
+                "corner_complexity": "high",
+                "drs_zones": []
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 2100,
+                "end_distance": 3337,
+                "base_time": 19.0,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 71.3,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.03,
+            "track_difficulty": "low",
+            "drs_zones_count": 1
+        }
+    },
+    "Spain": {
+        "track_name": "Spain",
+        "year": 2024,
+        "total_distance": 4657,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.05,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1200,
+                "base_time": 21.6,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 700,
+                        "end_distance": 1000,
+                        "detection_point": 600,
+                        "base_time_gain": 0.12,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1200,
+                "end_distance": 3000,
+                "base_time": 28.8,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 2900,
+                        "end_distance": 3600,
+                        "detection_point": 2800,
+                        "base_time_gain": 0.15,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 3000,
+                "end_distance": 4657,
+                "base_time": 21.8,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 72.3,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.55,
+            "track_difficulty": "medium"
+        }
+    },
+    "Austria": {
+        "track_name": "Austria",
+        "year": 2024,
+        "total_distance": 4318,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1400,
+                "base_time": 20.5,
+                "corner_complexity": "low",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 0,
+                        "end_distance": 700,
+                        "detection_point": 4000,
+                        "base_time_gain": 0.15,
+                        "activation_probability": 0.85
+                    },
+                    {
+                        "zone_id": 2,
+                        "start_distance": 1100,
+                        "end_distance": 1900,
+                        "detection_point": 950,
+                        "base_time_gain": 0.12,
+                        "activation_probability": 0.80
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1400,
+                "end_distance": 2800,
+                "base_time": 23.5,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 2800,
+                "end_distance": 4318,
+                "base_time": 21.0,
+                "corner_complexity": "low",
+                "drs_zones": [
+                    {
+                        "zone_id": 3,
+                        "start_distance": 2600,
+                        "end_distance": 3700,
+                        "detection_point": 2450,
+                        "base_time_gain": 0.18,
+                        "activation_probability": 0.90
+                    }
+                ]
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 65.0,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.45,
+            "track_difficulty": "easy"
+        }
+    },
+    "Great_Britain": {
+        "track_name": "Great_Britain",
+        "year": 2024,
+        "total_distance": 5891,
+        "difficulty": "high",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1800,
+                "base_time": 27.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 400,
+                        "end_distance": 800,
+                        "detection_point": 200,
+                        "base_time_gain": 0.10,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1800,
+                "end_distance": 3800,
+                "base_time": 32.0,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 2800,
+                        "end_distance": 3400,
+                        "detection_point": 2600,
+                        "base_time_gain": 0.12,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 3800,
+                "end_distance": 5891,
+                "base_time": 26.0,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 85.0,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.22,
+            "track_difficulty": "high"
+        }
+    },
+    "Hungary": {
+        "track_name": "Hungary",
+        "year": 2024,
+        "total_distance": 4381,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1400,
+                "base_time": 24.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 400,
+                        "end_distance": 700,
+                        "detection_point": 200,
+                        "base_time_gain": 0.08,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1400,
+                "end_distance": 3000,
+                "base_time": 28.0,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 2500,
+                        "end_distance": 3000,
+                        "detection_point": 2300,
+                        "base_time_gain": 0.10,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 3000,
+                "end_distance": 4381,
+                "base_time": 22.0,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 74.0,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.18,
+            "track_difficulty": "medium"
+        }
+    },
+    "Belgium": {
+        "track_name": "Belgium",
+        "year": 2024,
+        "total_distance": 7004,
+        "difficulty": "high",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.05,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 2500,
+                "base_time": 35.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 700,
+                        "end_distance": 1400,
+                        "detection_point": 500,
+                        "base_time_gain": 0.18,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 2500,
+                "end_distance": 4500,
+                "base_time": 32.0,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 3500,
+                        "end_distance": 4200,
+                        "detection_point": 3300,
+                        "base_time_gain": 0.15,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 4500,
+                "end_distance": 7004,
+                "base_time": 28.0,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 95.0,
+            "lap_time_tolerance": 1.5,
+            "drs_gain_target": 0.33,
+            "track_difficulty": "high"
+        }
+    },
+    "Netherlands": {
+        "track_name": "Netherlands",
+        "year": 2024,
+        "total_distance": 4259,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1400,
+                "base_time": 23.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 400,
+                        "end_distance": 700,
+                        "detection_point": 200,
+                        "base_time_gain": 0.10,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1400,
+                "end_distance": 2800,
+                "base_time": 26.0,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 2200,
+                        "end_distance": 2700,
+                        "detection_point": 2000,
+                        "base_time_gain": 0.12,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 2800,
+                "end_distance": 4259,
+                "base_time": 21.5,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 70.5,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.22,
+            "track_difficulty": "medium"
+        }
+    },
+    "Italy": {
+        "track_name": "Italy",
+        "year": 2024,
+        "total_distance": 5793,
+        "difficulty": "high",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1300,
+                "base_time": 22.0,
+                "corner_complexity": "low",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 600,
+                        "end_distance": 1100,
+                        "detection_point": 400,
+                        "base_time_gain": 0.15,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1300,
+                "end_distance": 4000,
+                "base_time": 26.5,
+                "corner_complexity": "low",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 3800,
+                        "end_distance": 4600,
+                        "detection_point": 3600,
+                        "base_time_gain": 0.20,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 4000,
+                "end_distance": 5793,
+                "base_time": 22.5,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 71.0,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.35,
+            "track_difficulty": "easy"
+        }
+    },
+    "Singapore": {
+        "track_name": "Singapore",
+        "year": 2024,
+        "total_distance": 4943,
+        "difficulty": "high",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1600,
+                "base_time": 28.0,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 500,
+                        "end_distance": 900,
+                        "detection_point": 300,
+                        "base_time_gain": 0.08,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1600,
+                "end_distance": 3200,
+                "base_time": 30.0,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 2500,
+                        "end_distance": 3000,
+                        "detection_point": 2300,
+                        "base_time_gain": 0.10,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 3200,
+                "end_distance": 4943,
+                "base_time": 24.0,
+                "corner_complexity": "high",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 82.0,
+            "lap_time_tolerance": 1.5,
+            "drs_gain_target": 0.18,
+            "track_difficulty": "high"
+        }
+    },
+    "Japan": {
+        "track_name": "Japan",
+        "year": 2024,
+        "total_distance": 5300,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1200,
+                "base_time": 23.5,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 600,
+                        "end_distance": 1000,
+                        "detection_point": 400,
+                        "base_time_gain": 0.08,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1200,
+                "end_distance": 3100,
+                "base_time": 28.5,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 2900,
+                        "end_distance": 3400,
+                        "detection_point": 2700,
+                        "base_time_gain": 0.08,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 3100,
+                "end_distance": 5300,
+                "base_time": 27.5,
+                "corner_complexity": "high",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 79.5,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.16,
+            "track_difficulty": "medium"
+        }
+    },
+    "Qatar": {
+        "track_name": "Qatar",
+        "year": 2024,
+        "total_distance": 5183,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1700,
+                "base_time": 26.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 600,
+                        "end_distance": 1000,
+                        "detection_point": 400,
+                        "base_time_gain": 0.12,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1700,
+                "end_distance": 3500,
+                "base_time": 28.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 2800,
+                        "end_distance": 3400,
+                        "detection_point": 2600,
+                        "base_time_gain": 0.15,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 3500,
+                "end_distance": 5183,
+                "base_time": 24.0,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 78.0,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.27,
+            "track_difficulty": "medium"
+        }
+    },
+    "United_States": {
+        "track_name": "United_States",
+        "year": 2024,
+        "total_distance": 5513,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1800,
+                "base_time": 26.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 500,
+                        "end_distance": 900,
+                        "detection_point": 300,
+                        "base_time_gain": 0.12,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1800,
+                "end_distance": 3600,
+                "base_time": 30.0,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 2900,
+                        "end_distance": 3500,
+                        "detection_point": 2700,
+                        "base_time_gain": 0.15,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 3600,
+                "end_distance": 5513,
+                "base_time": 25.0,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 81.0,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.27,
+            "track_difficulty": "medium"
+        }
+    },
+    "Mexico": {
+        "track_name": "Mexico",
+        "year": 2024,
+        "total_distance": 4304,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1400,
+                "base_time": 23.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 400,
+                        "end_distance": 800,
+                        "detection_point": 200,
+                        "base_time_gain": 0.12,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1400,
+                "end_distance": 2800,
+                "base_time": 26.0,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 2200,
+                        "end_distance": 2700,
+                        "detection_point": 2000,
+                        "base_time_gain": 0.10,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 2800,
+                "end_distance": 4304,
+                "base_time": 21.0,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 70.0,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.22,
+            "track_difficulty": "medium"
+        }
+    },
+    "Brazil": {
+        "track_name": "Brazil",
+        "year": 2024,
+        "total_distance": 4309,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1400,
+                "base_time": 22.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 0,
+                        "end_distance": 650,
+                        "detection_point": 4000,
+                        "base_time_gain": 0.14,
+                        "activation_probability": 0.80
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1400,
+                "end_distance": 2800,
+                "base_time": 26.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 2400,
+                        "end_distance": 3400,
+                        "detection_point": 2250,
+                        "base_time_gain": 0.16,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 2800,
+                "end_distance": 4309,
+                "base_time": 22.5,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 70.5,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.30,
+            "track_difficulty": "medium"
+        }
+    },
+    "Las_Vegas": {
+        "track_name": "Las_Vegas",
+        "year": 2024,
+        "total_distance": 6107,
+        "difficulty": "high",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 2000,
+                "base_time": 28.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 600,
+                        "end_distance": 1200,
+                        "detection_point": 400,
+                        "base_time_gain": 0.15,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 2000,
+                "end_distance": 4000,
+                "base_time": 30.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 3200,
+                        "end_distance": 4000,
+                        "detection_point": 3000,
+                        "base_time_gain": 0.18,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 4000,
+                "end_distance": 6107,
+                "base_time": 26.0,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 84.0,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.33,
+            "track_difficulty": "high"
+        }
+    },
+    "Abu_Dhabi": {
+        "track_name": "Abu_Dhabi",
+        "year": 2024,
+        "total_distance": 5281,
+        "difficulty": "medium",
+        "drs_settings": {
+            "enabled_after_lap": 2,
+            "gain_variation": 0.03,
+            "minimum_gap_for_drs": 1.0,
+            "drs_disabled_first_lap": true
+        },
+        "sectors": {
+            "1": {
+                "sector_number": 1,
+                "start_distance": 0,
+                "end_distance": 1700,
+                "base_time": 25.0,
+                "corner_complexity": "medium",
+                "drs_zones": [
+                    {
+                        "zone_id": 1,
+                        "start_distance": 500,
+                        "end_distance": 1000,
+                        "detection_point": 300,
+                        "base_time_gain": 0.12,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "2": {
+                "sector_number": 2,
+                "start_distance": 1700,
+                "end_distance": 3500,
+                "base_time": 28.0,
+                "corner_complexity": "high",
+                "drs_zones": [
+                    {
+                        "zone_id": 2,
+                        "start_distance": 2800,
+                        "end_distance": 3400,
+                        "detection_point": 2600,
+                        "base_time_gain": 0.15,
+                        "activation_probability": 0.85
+                    }
+                ]
+            },
+            "3": {
+                "sector_number": 3,
+                "start_distance": 3500,
+                "end_distance": 5281,
+                "base_time": 24.0,
+                "corner_complexity": "medium",
+                "drs_zones": []
+            }
+        },
+        "validation_targets": {
+            "avg_lap_time_target": 77.0,
+            "lap_time_tolerance": 1.0,
+            "drs_gain_target": 0.27,
+            "track_difficulty": "medium"
+        }
+    }
+}

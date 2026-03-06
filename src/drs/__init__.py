@@ -13,11 +13,15 @@ Modules:
 
 Usage:
     from drs import TimeSteppedDRSSimulator
-    from drs.zones import monaco_2024, monza_2024
+    from drs.zones import get_monaco_config, get_monza_config
 
-    config = monaco_2024.get_config()
+    config = get_monaco_config()
     simulator = TimeSteppedDRSSimulator(config, driver_data)
     results = simulator.simulate_race(num_laps=78)
+
+    # Or use the generic get_track_config for any track:
+    from drs.zones import get_track_config
+    config = get_track_config("Monaco")
 """
 
 __version__ = "1.0.0"

@@ -15,10 +15,7 @@ from src.drs.simulator import TimeSteppedDRSSimulator, SimulationConfig
 from src.drs.driver_state import create_test_driver_states
 
 # Import available track configurations
-from src.drs.zones.monaco_2024 import get_config as get_monaco_config
-from src.drs.zones.monza_2024 import get_config as get_monza_config
-from src.drs.zones.spain_2024 import get_config as get_spain_config
-from src.drs.zones.bahrain_2024 import get_config as get_bahrain_config
+from src.drs.zones import get_monaco_config, get_monza_config, get_spain_config, get_bahrain_config
 
 
 # Available track configurations

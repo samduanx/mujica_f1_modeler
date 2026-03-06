@@ -398,9 +398,9 @@ def main():
 
     # Get track config
     try:
-        from drs.zones.italy_2024 import get_config
+        from drs.zones import get_italy_config
 
-        track_config = get_config()
+        track_config = get_italy_config()
     except Exception as e:
         print(f"Error loading track config: {e}")
         return

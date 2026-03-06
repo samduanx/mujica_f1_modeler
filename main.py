@@ -7,10 +7,16 @@ including all sessions:
 - FP2 (Free Practice 2) - placeholder, not yet implemented
 - FP3 (Free Practice 3) - placeholder, not yet implemented
 - Qualifying (Q1, Q2, Q3) - placeholder, not yet implemented
+- Sprint - 100km sprint race (Imola, Austria, Sao Paulo)
 - Race - fully implemented using enhanced_long_dist_sim
 
 Supported Tracks:
 - Monaco, Spain, Monza, Italy, Australia, Bahrain, China, Japan
+
+Sprint Race Tracks (2022):
+- Imola (Emilia Romagna GP) - 21 laps, ~100km
+- Austria (Red Bull Ring) - 24 laps, ~100km
+- Sao_Paulo (Brazil GP) - 24 laps, ~100km
 
 Usage:
     # Run a full race weekend (runs all sessions - FP1/FP2/FP3/Qualifying are placeholders)
@@ -21,6 +27,12 @@ Usage:
 
     # Run qualifying and race
     uv run python main.py --gp-name Spain --sessions qualifying,race
+
+    # Run sprint race and main race (sprint weekend format)
+    uv run python main.py --gp-name Imola --sessions sprint,race
+
+    # Run only sprint race
+    uv run python main.py --gp-name Austria --sessions sprint
 
     # Run multiple tracks
     uv run python main.py --tracks Monaco,Spain,Monza
@@ -42,8 +54,11 @@ from typing import List, Optional, Dict, Any
 
 # Handle PYTHONPATH for module imports
 _project_root = os.path.dirname(os.path.abspath(__file__))
+_src_path = os.path.join(_project_root, "src")
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
+if _src_path not in sys.path:
+    sys.path.insert(0, _src_path)
 
 
 # =============================================================================
@@ -95,8 +110,30 @@ AVAILABLE_TRACKS = {
     },
 }
 
+# Sprint race tracks (2022 format: Imola, Austria, Sao Paulo)
+SPRINT_TRACKS = {
+    "Imola": {
+        "gp_name": "Imola",
+        "description": "Emilia Romagna GP - High downforce, technical, narrow",
+        "characteristics": "high_downforce, technical, narrow",
+        "sprint_laps": 21,
+    },
+    "Austria": {
+        "gp_name": "Austria",
+        "description": "Red Bull Ring - High speed, short lap, 3 DRS zones",
+        "characteristics": "high_speed, short_lap, overtaking",
+        "sprint_laps": 24,
+    },
+    "Sao_Paulo": {
+        "gp_name": "Brazil",
+        "description": "Interlagos - Anti-clockwise, high altitude, overtaking friendly",
+        "characteristics": "anti_clockwise, high_altitude, overtaking",
+        "sprint_laps": 24,
+    },
+}
+
 # Session types for race weekend
-SESSION_TYPES = ["fp1", "fp2", "fp3", "qualifying", "race"]
+SESSION_TYPES = ["fp1", "fp2", "fp3", "qualifying", "sprint", "race"]
 
 
 # =============================================================================
@@ -254,6 +291,15 @@ def generate_session_summary(
                     "- Q1: 18 minutes (eliminate slowest 5 drivers)",
                     "- Q2: 15 minutes (eliminate slowest 5 drivers)",
                     "- Q3: 12 minutes (top 10 battle for pole)",
+                ]
+            )
+        elif session == "sprint":
+            summary_lines.extend(
+                [
+                    "- 100km sprint race (~21-24 laps)",
+                    "- No mandatory pit stops",
+                    "- Points awarded to top 8 finishers (8-7-6-5-4-3-2-1)",
+                    "- Results determine main race starting grid",
                 ]
             )
     elif status == "completed":
@@ -507,6 +553,81 @@ def simulate_qualifying(
     }
 
 
+def simulate_sprint(
+    track_name: str,
+    seed: Optional[int] = None,
+    output_dir: Optional[str] = None,
+    **kwargs,
+) -> dict:
+    """
+    Simulate the Sprint Race session.
+
+    Sprint races are 100km short races that determine the starting grid
+    for the main Grand Prix. No mandatory pit stops.
+
+    Available tracks: Imola, Austria, Sao_Paulo
+
+    Args:
+        track_name: Name of the sprint track
+        seed: Random seed for reproducibility
+        output_dir: Output directory for race weekend
+
+    Returns:
+        Dictionary with sprint results including finishing positions
+    """
+    # Check if track is a valid sprint track
+    if track_name not in SPRINT_TRACKS:
+        print(f"Error: {track_name} is not a valid sprint track")
+        print(f"Available sprint tracks: {', '.join(SPRINT_TRACKS.keys())}")
+        return {
+            "session": "sprint",
+            "status": "error",
+            "track": track_name,
+            "error": f"Invalid sprint track: {track_name}",
+        }
+
+    print(f"\n{'=' * 60}")
+    print(f"SPRINT RACE - {track_name}")
+    print(f"{'=' * 60}")
+
+    # Import sprint simulation module
+    try:
+        import src.sprint
+        from src.sprint import run_sprint_race, StartingGridConnector
+
+        # Run sprint race
+        results = run_sprint_race(
+            track_name=track_name,
+            seed=seed,
+        )
+
+        # Generate session summary if output directory provided
+        if output_dir:
+            generate_session_summary("sprint", track_name, "completed", output_dir)
+
+        return {
+            "session": "sprint",
+            "status": "completed",
+            "track": track_name,
+            "results": results,
+            "final_positions": results.get("final_positions", {}),
+            "output_dir": results.get("output_dir"),
+        }
+
+    except Exception as e:
+        print(f"Error during sprint race simulation: {e}")
+
+        if output_dir:
+            generate_session_summary("sprint", track_name, "error", output_dir)
+
+        return {
+            "session": "sprint",
+            "status": "error",
+            "track": track_name,
+            "error": str(e),
+        }
+
+
 def simulate_race(
     track_name: str,
     seed: Optional[int] = None,
@@ -664,6 +785,7 @@ def run_race_weekend(
         "fp2": simulate_fp2,
         "fp3": simulate_fp3,
         "qualifying": simulate_qualifying,
+        "sprint": simulate_sprint,
         "race": simulate_race,
     }
 

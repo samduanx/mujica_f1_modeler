@@ -88,7 +88,6 @@ from weather.weather_types import (
 
 # Import DRS system modules
 from drs.driver_state import DriverRaceState
-from drs.base_config import TrackDRSConfig, DRSZone
 from drs.zones import TRACKS as DRS_TRACKS
 
 # Import Strategist system modules
@@ -1288,9 +1287,6 @@ class EnhancedRaceSimulator:
         )
         self.race_state.weather_integration = self.weather_integration
 
-        # Initialize DRS config if available
-        self.drs_config = self._get_drs_config(track_name)
-
         # Pit stop data
         self.pitlane_data = load_pitlane_time_data()
 
@@ -1386,7 +1382,7 @@ class EnhancedRaceSimulator:
             )
             self.skill_manager = None
 
-    def _get_drs_config(self, track_name: str) -> Optional[TrackDRSConfig]:
+    def _get_drs_config(self, track_name: str) -> Optional[Dict[str, Any]]:
         """Get DRS configuration for the track."""
         # Try to get track config from DRS zones
         track_getter = DRS_TRACKS.get(track_name)

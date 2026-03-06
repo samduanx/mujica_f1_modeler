@@ -20,10 +20,7 @@ except ImportError:
     FASTF1_AVAILABLE = False
     print("Warning: FastF1 not available. Install with: pip install fastf1")
 
-from drs.zones.monaco_2024 import get_config as get_monaco_config
-from drs.zones.monza_2024 import get_config as get_monza_config
-from drs.zones.spain_2024 import get_config as get_spain_config
-from drs.zones.bahrain_2024 import get_config as get_bahrain_config
+from drs.zones import get_monaco_config, get_monza_config, get_spain_config, get_bahrain_config
 
 
 def get_fastf1_session(year: int, grand_prix: str, session_type: str = "Q"):
