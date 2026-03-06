@@ -36,7 +36,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 import csv
-from collections import defaultdict
+from collections import defaultdict, deque
+import traceback
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 
@@ -103,6 +104,15 @@ from src.strategist import (
 )
 from src.strategist.integrators.race_sim_integration import (
     StrategistIntegration,
+)
+
+# Import Driver Skills System
+from src.skills import (
+    DriverSkillManager,
+    SkillContext,
+    SessionType,
+    WeatherCondition,
+    get_skill_manager,
 )
 
 # =============================================================================
@@ -1333,6 +1343,49 @@ class EnhancedRaceSimulator:
                     # No strategist found for this team
                     pass
 
+        # =======================================================================
+        # DRIVER SKILLS SYSTEM INTEGRATION
+        # =======================================================================
+        self.skill_manager: Optional[DriverSkillManager] = None
+        self.skill_activations: deque[Dict[str, Any]] = deque(maxlen=1000)
+        try:
+            self.skill_manager = get_skill_manager()
+            self.skill_manager.reset_for_new_race()
+        except Exception as e:
+            # Log warning and continue without skills - race can still run
+            # Log warning using dice_logger if available, fallback to stderr
+            if hasattr(self, "dice_logger") and self.dice_logger:
+                self.dice_logger.log_roll(
+                    lap=0,
+                    driver="SYSTEM",
+                    incident_type="initialization",
+                    dice_type="warning",
+                    dice_result=None,
+                    outcome="skill_manager_init_failed",
+                    race_time=0.0,
+                    details={"error": str(e)},
+                )
+            else:
+                import sys
+
+                print(
+                    f"Warning: Failed to initialize skill manager: {e}", file=sys.stderr
+                )
+            self.skill_manager = None
+
+        # Verify that skills were loaded from CSV
+        if self.skill_manager and not self.skill_manager.driver_skills:
+            csv_path = getattr(
+                self.skill_manager, "csv_path", "data/driver_ratings.csv"
+            )
+            import sys
+
+            print(
+                f"Warning: No driver skills loaded from {csv_path} - skills disabled",
+                file=sys.stderr,
+            )
+            self.skill_manager = None
+
     def _get_drs_config(self, track_name: str) -> Optional[TrackDRSConfig]:
         """Get DRS configuration for the track."""
         # Try to get track config from DRS zones
@@ -1340,6 +1393,87 @@ class EnhancedRaceSimulator:
         if track_getter:
             return track_getter()
         return None
+
+    def _apply_driver_skills(
+        self,
+        driver: str,
+        base_r: float,
+        lap: int,
+        is_raining: bool = False,
+        position: Optional[int] = None,
+        results: Optional[Dict] = None,
+    ) -> tuple[float, List[Dict[str, Any]]]:
+        """
+        Apply driver skills to modify R value for lap time calculation.
+
+        Args:
+            driver: Driver name
+            base_r: Base R value
+            lap: Current lap number
+            is_raining: Whether it's raining
+            position: Current race position (from previous lap)
+            results: Race results dict for calculating gaps
+
+        Returns:
+            Tuple of (adjusted_r, skill_activations)
+        """
+        # Return base R if skill manager is not available
+        if self.skill_manager is None:
+            return base_r, []
+
+        try:
+            # Calculate gaps if position and results are available
+            gap_to_ahead: Optional[float] = None
+            gap_to_behind: Optional[float] = None
+            if position is not None and results is not None:
+                # Find driver ahead and behind
+                sorted_drivers = sorted(
+                    results.items(),
+                    key=lambda x: x[1].get("cumulative_time", float("inf")),
+                )
+                for idx, (d, r) in enumerate(sorted_drivers):
+                    if d == driver:
+                        if idx > 0:
+                            gap_to_ahead = r.get("cumulative_time", 0) - sorted_drivers[
+                                idx - 1
+                            ][1].get("cumulative_time", 0)
+                        if idx < len(sorted_drivers) - 1:
+                            gap_to_behind = sorted_drivers[idx + 1][1].get(
+                                "cumulative_time", 0
+                            ) - r.get("cumulative_time", 0)
+                        break
+
+            # Create skill context with available information
+            context = SkillContext(
+                session_type=SessionType.RACE,
+                lap_number=lap,
+                total_laps=self.num_laps if hasattr(self, "num_laps") else None,
+                weather_condition=WeatherCondition.LIGHT_RAIN
+                if is_raining
+                else WeatherCondition.DRY,
+                position=position,
+                gap_to_ahead=gap_to_ahead,
+                gap_to_behind=gap_to_behind,
+            )
+
+            # Get adjusted R value from skill manager
+            adjusted_r, modifier, activations = self.skill_manager.get_adjusted_r_value(
+                driver, base_r, context, self.get_relative_time()
+            )
+
+            # Convert activations to dict format for logging
+            activation_dicts = [a.to_dict() for a in activations]
+
+            return adjusted_r, activation_dicts
+        except Exception as e:
+            # Log error and return base R value gracefully
+            import sys
+
+            print(
+                f"Warning: Failed to apply skills for {driver} on lap {lap}: {e}",
+                file=sys.stderr,
+            )
+            return base_r, []
 
     def get_relative_time(self) -> float:
         """Get estimated race time in seconds (time into the race)."""
@@ -2201,6 +2335,7 @@ class EnhancedRaceSimulator:
         tyre_sequence: List[str],
         current_tyre_index: int,
         start_delta: float = 0.0,
+        results: Optional[Dict] = None,
     ) -> Dict:
         """Simulate a single lap for a driver."""
 
@@ -2244,10 +2379,71 @@ class EnhancedRaceSimulator:
                 },
             )
 
-        # Calculate base lap time
-        base_lap_time = calculate_base_lap_time(driver_info["R_Value"], self.track_name)
+        # ===================================================================
+        # APPLY DRIVER SKILLS
+        # ===================================================================
+        # Get weather condition for skill context
+        is_raining = False
+        if (
+            hasattr(self.race_state, "weather_integration")
+            and self.race_state.weather_integration
+        ):
+            # Calculate race time in minutes for weather lookup
+            race_time_minutes = self.get_relative_time() / 60.0
+            try:
+                current_weather = (
+                    self.race_state.weather_integration.get_current_weather(
+                        lap=lap, race_time=race_time_minutes
+                    )
+                )
+                is_raining = current_weather.rain_intensity.value > 0
+            except Exception as e:
+                # Log warning and fallback to no rain if weather lookup fails
+                import sys
 
-        # Calculate degradation
+                print(f"Warning: Weather lookup failed: {e}", file=sys.stderr)
+                traceback.print_exc()
+                is_raining = False
+
+        # Get current race position from race_state
+        position = (
+            self.race_state.get_position(driver)
+            if hasattr(self.race_state, "get_position")
+            else None
+        )
+
+        # Apply skills to get adjusted R value (returns base R if skills disabled)
+        adjusted_r, skill_activations = self._apply_driver_skills(
+            driver, driver_info["R_Value"], lap, is_raining, position, results
+        )
+
+        # Log skill activations
+        if skill_activations:
+            for activation in skill_activations:
+                self.skill_activations.append(activation)
+                self.dice_logger.log_roll(
+                    lap=lap,
+                    driver=driver,
+                    incident_type="skill_activation",
+                    # Use "skill_effect" to indicate this is not a dice roll
+                    dice_type="skill_effect",
+                    # No dice roll for passive skill effects - magnitude is direct effect value
+                    dice_result=None,
+                    outcome=activation.get("skill_name_cn", "unknown"),
+                    race_time=self.get_relative_time(),
+                    details={
+                        "skill_name_en": activation.get("skill_name_en"),
+                        "effect_description": activation.get("effect_description"),
+                        "r_modifier": activation.get("r_modifier"),
+                        "is_passive_effect": True,
+                    },
+                )
+
+        # Calculate base lap time using adjusted R value
+        base_lap_time = calculate_base_lap_time(adjusted_r, self.track_name)
+
+        # Calculate degradation using base R value (not adjusted_r)
+        # This is intentional: skills affect lap times but not tire wear patterns
         r_max = max(d["R_Value"] for d in self.driver_data.values())
         degradation = calculate_degradation_with_cliff(
             lap_count_on_tyre,
@@ -2840,6 +3036,7 @@ class EnhancedRaceSimulator:
                     tyre_sequence=driver_result["tyre_sequence"],
                     current_tyre_index=current_tyre_index,
                     start_delta=start_deltas.get(driver, 0.0),
+                    results=results,
                 )
 
                 lap_time = lap_result["lap_time"]

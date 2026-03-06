@@ -1,0 +1,48 @@
+{
+  "skill_name": "抽象怪 (Abstract)",
+  "driver": "Piastri",
+  "version": "v2 (godfather = fast driver)",
+  "selection_timestamp": "2026-03-06T08:52:12.944714",
+  "race_selection": {
+    "available_races": [
+      "Spain",
+      "Monaco"
+    ],
+    "dice_roll": 1,
+    "selected_race": "Spain"
+  },
+  "godfather_selection": {
+    "candidates": [
+      "Verstappen",
+      "Leclerc",
+      "Hamilton",
+      "Alonso",
+      "Perez",
+      "Sainz",
+      "Russell"
+    ],
+    "num_candidates": 7,
+    "dice_roll": 2,
+    "selected_godfather": "Leclerc",
+    "godfather_info": {
+      "team": "Ferrari",
+      "nationality": "Monegasque",
+      "r_value": 100.4,
+      "note": "Fast but unlucky"
+    }
+  },
+  "skill_effects": {
+    "r_boost": 0.5,
+    "applies_to": [
+      "Piastri",
+      "Leclerc"
+    ],
+    "immunity": [
+      "incidents",
+      "critical_failures"
+    ],
+    "activation_point": "After Spain GP",
+    "track_restriction": "Not at Australian GP"
+  },
+  "narrative": "After the Spain GP, Piastri recognizes Leclerc (Fast but unlucky) as his 'godfather' (义父). Both gain R+0.5 and immunity."
+}
