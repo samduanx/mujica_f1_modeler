@@ -447,3 +447,204 @@ TRACK_UNDERCUT_DIFFICULTY = {
     "Las Vegas": 0,
     "Abu Dhabi": -1,
 }
+
+
+# ============== Team Order System Types ==============
+
+
+class TeamOrderType(Enum):
+    """Types of team orders that can be issued."""
+
+    SWAP_POSITIONS = "swap_positions"  # 交换位置 - 让快车通过
+    HOLD_POSITION = "hold_position"  # 保持位置 - 防守指令
+    YIELD_TO_TEAMMATE = "yield_to_teammate"  # 让车给队友 - 拉塞尔的技能相关
+    LET_FASTER_CAR_THROUGH = "let_faster_car_through"  # 让更快的车通过
+
+
+class TeamOrderStatus(Enum):
+    """Status of a team order."""
+
+    PENDING = "pending"  # 等待执行
+    EXECUTED = "executed"  # 已成功执行
+    DISOBEYED = "disobeyed"  # 车手拒绝执行
+    EXPIRED = "expired"  # 指令过期
+    CANCELLED = "cancelled"  # 被取消
+
+
+class TeamOrderCompliance(Enum):
+    """Compliance levels for team orders based on driver traits."""
+
+    AUTO_COMPLY = "auto_comply"  # 自动执行（如博塔斯帮助周冠宇）
+    HIGH = "high"  # 高概率执行（如拉塞尔的团队精神：1-2拒绝）
+    NORMAL = "normal"  # 正常概率（3-10执行，1-2拒绝）
+    LOW = "low"  # 低概率（顽固车手）
+    NEVER = "never"  # 从不执行（如奥康的狮子）
+
+
+@dataclass
+class TeamOrder:
+    """
+    Represents a team order issued during a race.
+
+    Attributes:
+        order_type: Type of team order
+        target_driver: Driver who needs to comply (让车的车手)
+        beneficiary_driver: Driver who benefits (获得位置的车手)
+        team: Team name
+        lap_issued: Lap when order was issued
+        reason: Reason for issuing the order
+        gap_threshold: Gap threshold that triggered the order (seconds)
+        status: Current status of the order
+        drs_zone: Whether issued in DRS zone (more effective)
+    """
+
+    order_type: TeamOrderType
+    target_driver: str
+    beneficiary_driver: str
+    team: str
+    lap_issued: int
+    reason: str
+    gap_threshold: float = 0.0
+    status: TeamOrderStatus = TeamOrderStatus.PENDING
+    drs_zone: bool = False
+
+    def is_active(self) -> bool:
+        """Check if the order is still active (pending)."""
+        return self.status == TeamOrderStatus.PENDING
+
+
+@dataclass
+class TeamOrderResult:
+    """
+    Result of a team order execution attempt.
+
+    Attributes:
+        success: Whether the order was successfully executed
+        roll: The dice roll (1d10)
+        threshold: Threshold for compliance
+        compliance_level: Driver's compliance level
+        message: Human-readable description of the result
+        position_swap: Whether positions were actually swapped
+        disobey_penalty: Whether there should be a penalty for disobeying
+    """
+
+    success: bool
+    roll: int
+    threshold: int
+    compliance_level: TeamOrderCompliance
+    message: str
+    position_swap: bool = False
+    disobey_penalty: bool = False
+
+
+@dataclass
+class DriverTeamOrderTraits:
+    """
+    Driver characteristics related to team order compliance.
+
+    These traits affect how likely a driver is to follow team orders.
+
+    Attributes:
+        driver_name: Driver name
+        team_spirit: 团队精神 (like Russell - high compliance)
+        lion_trait: 狮子 (like Ocon - ignores team orders)
+        big_brother: 好大哥 (like Bottas - helps teammate)
+        base_compliance: Base compliance level (0.0-1.0)
+        stubbornness: How stubborn the driver is (0.0-1.0)
+    """
+
+    driver_name: str
+    team_spirit: bool = False  # 拉塞尔的团队精神
+    lion_trait: bool = False  # 奥康的狮子
+    big_brother: bool = False  # 博塔斯的好大哥
+    base_compliance: float = 0.5
+    stubbornness: float = 0.5
+
+    def get_compliance_threshold(self) -> tuple[int, TeamOrderCompliance]:
+        """
+        Get the compliance threshold and level for this driver.
+
+        Returns:
+            Tuple of (threshold, compliance_level)
+            threshold: Roll >= this value to comply (1d10)
+        """
+        if self.lion_trait:
+            return 11, TeamOrderCompliance.NEVER  # Never complies
+        elif self.team_spirit:
+            return 3, TeamOrderCompliance.HIGH  # Only 1-2 fails (80% success)
+        elif self.big_brother:
+            return 1, TeamOrderCompliance.AUTO_COMPLY  # Always helps teammate
+        elif self.stubbornness >= 0.8:
+            return 8, TeamOrderCompliance.LOW  # 80% success rate
+        elif self.base_compliance >= 0.7:
+            return 3, TeamOrderCompliance.HIGH  # 80% success
+        else:
+            return 3, TeamOrderCompliance.NORMAL  # Standard 80% success
+
+
+@dataclass
+class TeamOrderContext:
+    """
+    Context for team order decisions.
+
+    Contains all relevant race state for determining if/when to issue
+    team orders and whether they will be followed.
+    """
+
+    # Race state
+    current_lap: int
+    total_laps: int
+    is_drs_active: bool = False
+
+    # Car positions (relative)
+    target_position: int = 0
+    beneficiary_position: int = 0
+
+    # Performance data
+    target_pace: float = 0.0  # Seconds per lap
+    beneficiary_pace: float = 0.0
+    pace_delta: float = 0.0  # Positive = beneficiary faster
+
+    # Gap data
+    gap_between: float = 0.0  # Seconds between cars
+    gap_to_leader: float = 0.0
+
+    # Championship context
+    beneficiary_in_championship_fight: bool = False
+    target_in_championship_fight: bool = False
+
+    # Previous orders history
+    recent_disobey_count: int = 0
+    total_orders_issued: int = 0
+
+    def should_issue_swap_order(self, min_pace_delta: float = 0.3) -> bool:
+        """
+        Determine if a swap order should be issued.
+
+        Args:
+            min_pace_delta: Minimum pace advantage to trigger (seconds/lap)
+
+        Returns:
+            True if swap order should be issued
+        """
+        # Check if cars are adjacent
+        if abs(self.target_position - self.beneficiary_position) != 1:
+            return False
+
+        # Check if beneficiary is behind
+        if self.beneficiary_position >= self.target_position:
+            return False
+
+        # Check pace delta
+        if self.pace_delta < min_pace_delta:
+            return False
+
+        # Check if gap is reasonable (not too far)
+        if self.gap_between > 2.0:
+            return False
+
+        return True
+
+    def get_pace_delta(self) -> float:
+        """Calculate pace delta (beneficiary - target, negative = faster)."""
+        return self.beneficiary_pace - self.target_pace

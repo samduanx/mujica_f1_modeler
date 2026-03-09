@@ -343,7 +343,7 @@ def generate_session_summary(
     summary_content = "\n".join(summary_lines)
     summary_path = os.path.join(output_dir, f"session_summary_{session}.md")
 
-    with open(summary_path, "w") as f:
+    with open(summary_path, "w", encoding="utf-8") as f:
         f.write(summary_content)
 
     return summary_path
@@ -735,7 +735,7 @@ def simulate_fp1(
             report_path = os.path.join(
                 output_dir, f"fp1_report_{track_name.lower()}.md"
             )
-            with open(report_path, "w") as f:
+            with open(report_path, "w", encoding="utf-8") as f:
                 f.write(f"# FP1 Report - {track_name}\n\n")
                 f.write(f"**Session:** Free Practice 1\n\n")
                 f.write(f"**Track:** {track_name}\n\n")
@@ -855,6 +855,99 @@ def simulate_fp2(
         if output_dir:
             generate_session_summary("fp2", track_name, "completed", output_dir)
 
+            # Get teams for report
+            teams = get_teams()
+
+            # 1. Save results CSV
+            results_csv_path = os.path.join(
+                output_dir, f"fp2_results_{track_name.lower()}.csv"
+            )
+            with open(results_csv_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Driver", "Team", "Best Lap", "Laps", "R Delta"])
+
+                # Sort by best lap time
+                standings = sorted(
+                    fp2_results.best_times.items(),
+                    key=lambda x: x[1] if x[1] < float("inf") else 9999,
+                )
+                for driver, best_time in standings:
+                    laps = len(fp2_results.lap_times.get(driver, []))
+                    r_delta = fp2_results.setup_results.get(driver, None)
+                    r_delta_val = r_delta.r_rating_delta if r_delta else 0.0
+                    best_str = f"{best_time:.3f}" if best_time < float("inf") else ""
+                    team = teams.get(driver, "Unknown")
+                    writer.writerow(
+                        [driver, team, best_str, laps, f"{r_delta_val:+.2f}"]
+                    )
+
+            print(f"FP2 results saved to: {results_csv_path}")
+
+            # 2. Save dice rolls CSV
+            dice_csv_path = os.path.join(
+                output_dir, f"fp2_dice_rolls_{track_name.lower()}.csv"
+            )
+            with open(dice_csv_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Driver", "Category", "Roll Value", "R Delta"])
+                for driver, setup in fp2_results.setup_results.items():
+                    writer.writerow([driver, "aerodynamics", setup.aerodynamics, ""])
+                    writer.writerow([driver, "suspension", setup.suspension, ""])
+                    writer.writerow([driver, "differential", setup.differential, ""])
+                    writer.writerow([driver, "brake_balance", setup.brake_balance, ""])
+                    writer.writerow([driver, "tyre_pressure", setup.tyre_pressure, ""])
+            print(f"FP2 dice rolls saved to: {dice_csv_path}")
+
+            # 3. Generate full markdown report
+            report_path = os.path.join(
+                output_dir, f"fp2_report_{track_name.lower()}.md"
+            )
+            with open(report_path, "w", encoding="utf-8") as f:
+                f.write(f"# FP2 Report - {track_name}\n\n")
+                f.write(f"**Session:** Free Practice 2\n\n")
+                f.write(f"**Track:** {track_name}\n\n")
+
+                # Results table
+                f.write("## Session Results\n\n")
+                f.write("| Pos | Driver | Team | Best Lap | Laps | R Delta |\n")
+                f.write("|-----|--------|------|----------|------|---------|\n")
+
+                # Sort by best lap time
+                standings = sorted(
+                    fp2_results.best_times.items(),
+                    key=lambda x: x[1] if x[1] < float("inf") else 9999,
+                )
+                for pos, (driver, best_time) in enumerate(standings, 1):
+                    laps = len(fp2_results.lap_times.get(driver, []))
+                    r_delta = fp2_results.setup_results.get(driver, None)
+                    r_delta_str = f"{r_delta.r_rating_delta:+.2f}" if r_delta else ""
+                    best_str = f"{best_time:.3f}" if best_time < float("inf") else ""
+                    team = teams.get(driver, "Unknown")
+                    f.write(
+                        f"| {pos} | {driver} | {team} | {best_str} | {laps} | {r_delta_str} |\n"
+                    )
+
+                # Setup tuning results
+                f.write("\n## Setup Tuning Results\n\n")
+                f.write(
+                    "| Driver | Aero | Susp | Diff | Brake | Tyre | Total | R Delta |\n"
+                )
+                f.write(
+                    "|--------|------|------|------|-------|------|-------|---------|\n"
+                )
+                for driver, setup in fp2_results.setup_results.items():
+                    f.write(
+                        f"| {driver} | {setup.aerodynamics} | {setup.suspension} | "
+                        f"{setup.differential} | {setup.brake_balance} | {setup.tyre_pressure} | "
+                        f"{setup.total_effect:+.1f} | {setup.r_rating_delta:+.2f} |\n"
+                    )
+
+                f.write("\n## Session Statistics\n\n")
+                f.write(f"- Total Laps: {fp2_results.total_laps}\n")
+                f.write(f"- Incidents: {len(fp2_results.incidents)}\n")
+
+            print(f"FP2 report saved to: {report_path}")
+
         return {
             "session": "fp2",
             "status": "completed",
@@ -942,6 +1035,108 @@ def simulate_fp3(
         if output_dir:
             generate_session_summary("fp3", track_name, "completed", output_dir)
 
+            # Get teams for report
+            import csv
+
+            teams = get_teams()
+
+            # 1. Save results CSV
+            results_csv_path = os.path.join(
+                output_dir, f"fp3_results_{track_name.lower()}.csv"
+            )
+            with open(results_csv_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Driver", "Team", "Best Lap", "Laps", "R Delta"])
+
+                # Sort by best lap time
+                standings = sorted(
+                    fp3_results.best_times.items(),
+                    key=lambda x: x[1] if x[1] < float("inf") else 9999,
+                )
+                for driver, best_time in standings:
+                    laps = len(fp3_results.lap_times.get(driver, []))
+                    r_delta = fp3_results.setup_results.get(driver, None)
+                    r_delta_val = r_delta.r_rating_delta if r_delta else 0.0
+                    best_str = f"{best_time:.3f}" if best_time < float("inf") else ""
+                    team = teams.get(driver, "Unknown")
+                    writer.writerow(
+                        [driver, team, best_str, laps, f"{r_delta_val:+.2f}"]
+                    )
+
+            print(f"FP3 results saved to: {results_csv_path}")
+
+            # 2. Save dice rolls CSV
+            dice_csv_path = os.path.join(
+                output_dir, f"fp3_dice_rolls_{track_name.lower()}.csv"
+            )
+            with open(dice_csv_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Driver", "Category", "Roll Value", "R Delta"])
+                for driver, setup in fp3_results.setup_results.items():
+                    writer.writerow([driver, "aerodynamics", setup.aerodynamics, ""])
+                    writer.writerow([driver, "suspension", setup.suspension, ""])
+                    writer.writerow([driver, "differential", setup.differential, ""])
+                    writer.writerow([driver, "brake_balance", setup.brake_balance, ""])
+                    writer.writerow([driver, "tyre_pressure", setup.tyre_pressure, ""])
+            print(f"FP3 dice rolls saved to: {dice_csv_path}")
+
+            # 3. Generate full markdown report
+            report_path = os.path.join(
+                output_dir, f"fp3_report_{track_name.lower()}.md"
+            )
+            with open(report_path, "w", encoding="utf-8") as f:
+                f.write(f"# FP3 Report - {track_name}\n\n")
+                f.write(f"**Session:** Free Practice 3\n\n")
+                f.write(f"**Track:** {track_name}\n\n")
+
+                # Results table
+                f.write("## Session Results\n\n")
+                f.write("| Pos | Driver | Team | Best Lap | Laps | R Delta |\n")
+                f.write("|-----|--------|------|----------|------|---------|\n")
+
+                # Sort by best lap time
+                standings = sorted(
+                    fp3_results.best_times.items(),
+                    key=lambda x: x[1] if x[1] < float("inf") else 9999,
+                )
+                for pos, (driver, best_time) in enumerate(standings, 1):
+                    laps = len(fp3_results.lap_times.get(driver, []))
+                    r_delta = fp3_results.setup_results.get(driver, None)
+                    r_delta_str = f"{r_delta.r_rating_delta:+.2f}" if r_delta else ""
+                    best_str = f"{best_time:.3f}" if best_time < float("inf") else ""
+                    team = teams.get(driver, "Unknown")
+                    f.write(
+                        f"| {pos} | {driver} | {team} | {best_str} | {laps} | {r_delta_str} |\n"
+                    )
+
+                # Setup tuning results
+                f.write("\n## Setup Tuning Results\n\n")
+                f.write(
+                    "| Driver | Aero | Susp | Diff | Brake | Tyre | Total | R Delta |\n"
+                )
+                f.write(
+                    "|--------|------|------|------|-------|------|-------|---------|\n"
+                )
+                for driver, setup in fp3_results.setup_results.items():
+                    f.write(
+                        f"| {driver} | {setup.aerodynamics} | {setup.suspension} | "
+                        f"{setup.differential} | {setup.brake_balance} | {setup.tyre_pressure} | "
+                        f"{setup.total_effect:+.1f} | {setup.r_rating_delta:+.2f} |\n"
+                    )
+
+                f.write("\n## Session Statistics\n\n")
+                f.write(f"- Total Laps: {fp3_results.total_laps}\n")
+                f.write(f"- Incidents: {len(fp3_results.incidents)}\n")
+
+                # Parc Fermé info
+                f.write("\n## Parc Fermé Status\n\n")
+                f.write(
+                    f"- Status: {'Active' if parc_ferme.is_active() else 'Inactive'}\n"
+                )
+                f.write(f"- Drivers with setup data: {len(r_deltas)}\n")
+
+            print(f"FP3 report saved to: {report_path}")
+
         return {
             "session": "fp3",
             "status": "completed",
@@ -971,6 +1166,7 @@ def simulate_qualifying(
     track_name: str,
     output_dir: Optional[str] = None,
     is_sprint_weekend: bool = False,
+    setup_tuning_deltas: Optional[Dict[str, float]] = None,
     **kwargs,
 ) -> dict:
     """
@@ -980,6 +1176,7 @@ def simulate_qualifying(
         track_name: Name of the track
         output_dir: Output directory for race weekend
         is_sprint_weekend: If True, use sprint qualifying format (SQ1/SQ2/SQ3)
+        setup_tuning_deltas: Optional dict mapping driver names to R rating deltas from FP1/FP3 setup tuning
     """
     print(f"\n{'=' * 60}")
     print(f"Qualifying Session - {track_name}")
@@ -1011,8 +1208,8 @@ def simulate_qualifying(
         # Create incident handler
         incident_handler = QualifyingIncidentHandler()
 
-        # Get qualifying configuration
-        qual_config = get_qualifying_sessions_config(is_sprint_weekend)
+        # Get qualifying configuration with dynamic elimination based on driver count
+        qual_config = get_qualifying_sessions_config(is_sprint_weekend, len(drivers))
         sessions_config = [
             (s["name"], s["duration_minutes"], s["elimination_count"])
             for s in qual_config
@@ -1067,24 +1264,44 @@ def simulate_qualifying(
             top_tier_drivers = get_top_tier_drivers()
             bottom_tier_drivers = get_bottom_tier_drivers()
 
+            # Load team PR values for qualifying performance calculation
+            from src.utils.config_loader import get_all_teams_pr
+            team_pr_values = get_all_teams_pr(track_name)
+            max_pr = max(team_pr_values.values()) if team_pr_values else 308.0
+
             # Simulate each driver setting lap times
             for driver in active_drivers:
                 # Generate realistic lap time with variation
-                # NOTE: Reduced random variation to make driver skill more significant.
-                # Previous: skill_factor (-0.5 to 0.5) + additional (-0.2 to 0.2) = ~1.4s total random
-                # Now: skill_factor (-0.3 to 0.3) + additional (-0.1 to 0.1) = ~0.8s total random
-                # Skill gap between tiers remains 0.6s, so skill is now more influential.
+                # NOTE: Significantly increased team PR impact for qualifying.
+                # Qualifying is single-lap pace, so car performance matters more.
                 base = base_lap_time
-                # Add driver skill variation (top drivers faster)
-                skill_factor = random.uniform(-0.3, 0.3)  # Reduced from -0.5 to 0.5
+
+                # Get team for this driver
+                team_name = teams.get(driver, "Unknown")
+                team_pr = team_pr_values.get(team_name, 300.0)
+
+                # Calculate team performance penalty (slower teams = higher lap time)
+                # Formula: (max_PR - team_PR) * 0.08 for qualifying
+                # This makes a ~19 second PR difference translate to ~1.5 seconds on track
+                team_penalty = (max_pr - team_pr) * 0.08
+
+                # Add driver skill variation (reduced from before, now team matters more)
+                skill_factor = random.uniform(-0.15, 0.15)  # Further reduced
                 if driver in top_tier_drivers:
-                    skill_factor -= 0.3  # Top drivers faster
+                    skill_factor -= 0.2  # Top drivers gain less advantage
                 elif driver in bottom_tier_drivers:
-                    skill_factor += 0.3  # Slower drivers
+                    skill_factor += 0.2  # Slower drivers
+
+                # Apply setup tuning delta from FP1/FP3
+                setup_delta = 0.0
+                if setup_tuning_deltas and driver in setup_tuning_deltas:
+                    setup_delta = setup_tuning_deltas[driver]
+                    setup_delta = max(-0.5, min(0.5, setup_delta))
+                    skill_factor -= setup_delta * 0.3  # Reduced effect
 
                 lap_time = (
-                    base + skill_factor + random.uniform(-0.1, 0.1)
-                )  # Reduced from -0.2 to 0.2
+                    base + team_penalty + skill_factor + random.uniform(-0.05, 0.05)
+                )  # Reduced random variation
 
                 # Check for incidents
                 incident_roll = random.randint(1, 100)
@@ -1100,21 +1317,22 @@ def simulate_qualifying(
                     }
                 )
 
+                lap_valid = True
                 if incident_roll <= 5:  # 5% crash chance
                     incident = incident_handler._create_crash_incident(driver)
                     session.record_incident(incident)
                     print(f"  ! {driver} crashed - lap deleted, red flag")
                     dice_rolls[-1]["outcome"] = "crash"
-                    continue
+                    lap_valid = False
                 elif incident_roll <= 15:  # 10% track limits
                     incident = incident_handler._create_track_limits_incident(driver)
                     print(f"  ! {driver} track limits - lap deleted")
                     dice_rolls[-1]["outcome"] = "track_limits"
-                    continue
+                    lap_valid = False
                 else:
                     dice_rolls[-1]["outcome"] = "valid_lap"
 
-                # Record valid lap
+                # Record lap time (even if invalid due to incident)
                 session.record_lap_time(driver, lap_time)
 
                 # Store lap time in results
@@ -1131,7 +1349,9 @@ def simulate_qualifying(
                 active_drivers = advancing
 
                 # Mark eliminated drivers with grid position calculation
-                num_drivers = len(drivers)  # Actual number of drivers after Andretti filter
+                num_drivers = len(
+                    drivers
+                )  # Actual number of drivers after Andretti filter
                 for driver in eliminated:
                     driver_results[driver].eliminated_in = session_name
                     if session_name in ["Q1", "SQ1"]:
@@ -1189,7 +1409,7 @@ def simulate_qualifying(
             csv_filename = f"qualifying_results_{track_name.lower()}.csv"
             csv_path = os.path.join(output_dir, csv_filename)
 
-            with open(csv_path, "w", newline="") as f:
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(
                     [
@@ -1227,7 +1447,7 @@ def simulate_qualifying(
             md_filename = f"qualifying_report_{track_name.lower()}.md"
             md_path = os.path.join(output_dir, md_filename)
 
-            with open(md_path, "w") as f:
+            with open(md_path, "w", encoding="utf-8") as f:
                 f.write(
                     f"# {'Sprint ' if is_sprint_weekend else ''}Qualifying Report - {track_name}\n\n"
                 )
@@ -1327,10 +1547,71 @@ def simulate_qualifying(
         }
 
 
+def simulate_sprint_qualifying(
+    track_name: str,
+    output_dir: Optional[str] = None,
+    setup_tuning_deltas: Optional[Dict[str, float]] = None,
+    **kwargs,
+) -> dict:
+    """
+    Simulate Sprint Qualifying session (SQ1, SQ2, SQ3) for sprint weekends.
+
+    2022 Sprint Weekend Format:
+    - FP1 → Sprint Qualifying (SQ1/SQ2/SQ3) → Sprint Race → Qualifying (Q1/Q2/Q3) → Main Race
+
+    Sprint Qualifying determines the grid for the Sprint Race (not the main race).
+
+    Args:
+        track_name: Name of the track
+        output_dir: Output directory for race weekend
+        setup_tuning_deltas: Optional dict mapping driver names to R rating deltas from FP1
+    """
+    print(f"\n{'=' * 60}")
+    print(f"Sprint Qualifying Session (SQ1/SQ2/SQ3) - {track_name}")
+    print(f"{'=' * 60}")
+    print("Note: Sprint Qualifying determines the Sprint Race grid")
+    print("      The main race grid is determined by Saturday's Qualifying\n")
+
+    # Sprint qualifying uses the same logic as regular qualifying but with sprint format
+    result = simulate_qualifying(
+        track_name=track_name,
+        output_dir=output_dir,
+        is_sprint_weekend=True,  # This triggers SQ1/SQ2/SQ3 format
+        setup_tuning_deltas=setup_tuning_deltas,
+        **kwargs,
+    )
+
+    # Update the session identifier to distinguish from main qualifying
+    if result.get("status") == "completed":
+        result["session"] = "sprint_qualifying"
+        # Rename output files to distinguish from main qualifying
+        if output_dir and result.get("csv_path"):
+            import os
+
+            old_csv = result["csv_path"]
+            new_csv = old_csv.replace(
+                "qualifying_results_", "sprint_qualifying_results_"
+            )
+            if os.path.exists(old_csv) and old_csv != new_csv:
+                os.rename(old_csv, new_csv)
+                result["csv_path"] = new_csv
+        if output_dir and result.get("report_path"):
+            import os
+
+            old_md = result["report_path"]
+            new_md = old_md.replace("qualifying_report_", "sprint_qualifying_report_")
+            if os.path.exists(old_md) and old_md != new_md:
+                os.rename(old_md, new_md)
+                result["report_path"] = new_md
+
+    return result
+
+
 def simulate_sprint(
     track_name: str,
     seed: Optional[int] = None,
     output_dir: Optional[str] = None,
+    grid_positions: Optional[Dict[str, int]] = None,
     **kwargs,
 ) -> dict:
     """
@@ -1369,11 +1650,13 @@ def simulate_sprint(
         import src.sprint
         from src.sprint import run_sprint_race, StartingGridConnector
 
-        # Run sprint race - pass output_dir if provided
+        # Run sprint race - pass output_dir and grid_positions if provided
+        # Grid positions come from Sprint Qualifying (SQ1/SQ2/SQ3)
         results = run_sprint_race(
             track_name=track_name,
             seed=seed,
             output_dir=output_dir,  # Pass race weekend output directory
+            grid_positions=grid_positions,  # From Sprint Qualifying
         )
 
         # Generate session summary if output directory provided
@@ -1659,11 +1942,16 @@ def run_race_weekend(
         print(f"\nSingle session mode - using default output locations")
 
     # Session mapping
+    # 2022 Sprint Weekend Format: FP1 → Sprint Qualifying → Sprint → Qualifying → Race
     session_map = {
         "fp1": simulate_fp1,
         "fp2": simulate_fp2,
         "fp3": simulate_fp3,
-        "qualifying": simulate_qualifying,
+        "practice1": simulate_fp1,
+        "practice2": simulate_fp2,
+        "practice3": simulate_fp3,
+        "sprint_qualifying": simulate_sprint_qualifying,  # SQ1/SQ2/SQ3 for sprint grid
+        "qualifying": simulate_qualifying,  # Q1/Q2/Q3 for main race grid
         "sprint": simulate_sprint,
         "race": simulate_race,
     }
@@ -1692,7 +1980,10 @@ def run_race_weekend(
                 extra_kwargs["output_dir"] = session_output_dir
                 if session_key == "race":
                     extra_kwargs["is_race_weekend"] = True
-                    # Pass grid positions from sprint (if sprint weekend) or qualifying
+                    # 2022 Sprint Weekend Format:
+                    # - Sprint Qualifying (Friday) → Sprint Race (Saturday) → Main Race grid
+                    # - Qualifying (Saturday) → Main Race grid (if sprint not run)
+                    # Priority: Sprint Race results > Qualifying results
                     if (
                         "sprint" in results
                         and results["sprint"].get("status") == "completed"
@@ -1703,16 +1994,53 @@ def run_race_weekend(
                         extra_kwargs["grid_positions"] = {
                             driver: int(pos) for pos, driver in sprint_positions.items()
                         }
+                        print(f"  Using Sprint Race results for main race grid")
                     elif (
                         "qualifying" in results
                         and results["qualifying"].get("status") == "completed"
                     ):
+                        # Use Saturday's Qualifying for main race grid
                         extra_kwargs["grid_positions"] = results["qualifying"].get(
                             "grid_positions", {}
                         )
+                        print(f"  Using Qualifying results for main race grid")
+                elif session_key == "sprint":
+                    # Sprint Race - get grid positions from Sprint Qualifying if available
+                    if (
+                        "sprint_qualifying" in results
+                        and results["sprint_qualifying"].get("status") == "completed"
+                    ):
+                        extra_kwargs["grid_positions"] = results["sprint_qualifying"].get(
+                            "grid_positions", {}
+                        )
+                        print(f"  Using Sprint Qualifying results for Sprint Race grid")
+                elif session_key == "sprint_qualifying":
+                    # Sprint Qualifying (SQ1/SQ2/SQ3) on Friday
+                    # This determines the Sprint Race grid, NOT the main race grid
+                    print(f"  Sprint Qualifying determines Sprint Race grid only")
+                    # Pass FP1 setup tuning deltas for sprint weekends (FP1 → SQ)
+                    fp1_key = None
+                    if "fp1" in results:
+                        fp1_key = "fp1"
+                    elif "practice1" in results:
+                        fp1_key = "practice1"
+
+                    if fp1_key:
+                        fp1_setup_results = results[fp1_key].get("setup_results", {})
+                        if fp1_setup_results:
+                            extra_kwargs["setup_tuning_deltas"] = fp1_setup_results
+                            print(
+                                f"  Passing {len(fp1_setup_results)} FP1 setup tuning results to Sprint Qualifying"
+                            )
                 elif session_key == "qualifying":
-                    # Check if this is a sprint weekend track
-                    extra_kwargs["is_sprint_weekend"] = track_name in SPRINT_TRACKS
+                    # Normal Qualifying (Q1/Q2/Q3) on Saturday for sprint weekends
+                    # This determines the main race grid (when sprint is not used)
+                    if track_name in SPRINT_TRACKS:
+                        print(
+                            f"  Qualifying determines main race grid (sprint weekend)"
+                        )
+                    else:
+                        print(f"  Qualifying determines main race grid")
 
             result = session_map[session_key](
                 track_name,

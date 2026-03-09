@@ -91,6 +91,7 @@ class SkillContext:
             is_first_lap: Whether this is lap 1
             is_danger_situation: Whether in danger (Q1/Q2 cutoff, etc.)
             is_forming_train: Whether a train is forming behind
+            is_in_multi_car_train: Whether this overtake is within a multi-car train (3+ cars within 1s)
 
             # Stint info
             stint_number: Current stint number
@@ -159,6 +160,7 @@ class SkillContext:
     is_first_lap: bool = False
     is_danger_situation: bool = False
     is_forming_train: bool = False
+    is_in_multi_car_train: bool = False
 
     # Stint info
     stint_number: int = 1
@@ -168,6 +170,10 @@ class SkillContext:
     team_order_issued: bool = False
     team_order_to_let_through: bool = False
     team_order_to_defend: bool = False
+    team_order_active: bool = False  # 当前是否处于车队指令生效状态
+    team_order_target: Optional[str] = None  # 让车指令的目标车手
+    team_order_beneficiary: Optional[str] = None  # 让车指令的受益车手
+    team_order_mode: Optional[str] = None  # 车队指令模式: "yield", "defend", "swap"
 
     # Incident info
     incident_ahead: bool = False
@@ -239,6 +245,64 @@ class SkillContext:
     def is_teammate_under_threat(self) -> bool:
         """Check if teammate is under direct threat from behind."""
         return self.teammate_has_direct_threat
+
+    def is_team_order_active(self) -> bool:
+        """Check if a team order is currently active."""
+        return self.team_order_active or self.team_order_issued
+
+    def is_yield_order(self) -> bool:
+        """Check if current team order is to yield position."""
+        return (
+            self.team_order_active
+            and self.team_order_mode == "yield"
+            and self.team_order_to_let_through
+        )
+
+    def is_defend_order(self) -> bool:
+        """Check if current team order is to defend position."""
+        return (
+            self.team_order_active
+            and self.team_order_mode == "defend"
+            and self.team_order_to_defend
+        )
+
+    def is_helping_teammate_scenario(
+        self,
+        teammate_name: str,
+        third_driver_in_train: bool = True,
+    ) -> bool:
+        """
+        Check if this is a "好大哥" (Bottas helping Zhou) scenario.
+
+        Conditions:
+        1. Team order active or overtake mode
+        2. Driver, teammate, and third driver are in a train
+        3. Teammate is behind
+
+        Args:
+            teammate_name: Name of teammate to help
+            third_driver_in_train: Whether there's a third driver in the train
+
+        Returns:
+            True if all conditions are met
+        """
+        # Check if team order is active or in overtake/attack mode
+        if not (self.team_order_active or self.is_attacking or self.is_defending):
+            return False
+
+        # Check if teammate matches
+        if self.teammate_name != teammate_name:
+            return False
+
+        # Check if teammate is behind (gap positive means we're ahead)
+        if not self.is_behind_teammate:
+            return False
+
+        # Check if in multi-car train (optional)
+        if third_driver_in_train and not self.is_in_multi_car_train:
+            return False
+
+        return True
 
     def is_vs_driver(self, driver_name: str) -> bool:
         """Check if currently racing against specific driver."""

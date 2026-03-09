@@ -60,8 +60,9 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.WEATHER_RAIN,
         "effect_type": SkillEffectType.RATING_BOOST,
         "effect_value": 0.5,
-        "description": "R+0.5 in rainy conditions",
+        "description": "R+0.5 in rainy conditions (只激活一次)",
         "parser": "parse_rain_boost",
+        "max_activations": 1,
     },
     "直感A": {
         "name_en": "InstinctA",
@@ -69,9 +70,10 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.WEATHER_RAIN,  # Also DEFENDING - handled specially
         "effect_type": SkillEffectType.RATING_BOOST,
         "effect_value": 0.3,
-        "description": "R+0.3 when defending or in rain",
+        "description": "R+0.3 when defending or in rain (每次处于ot模式只激活一次)",
         "parser": "parse_defense_or_weather",
         "conditions": {"defense_bonus": 0.3, "rain_bonus": 0.3},
+        "max_activations": 1,
     },
     # Qualifying skills
     "勒一圈": {
@@ -80,19 +82,21 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.QUALIFYING_ANY,
         "effect_type": SkillEffectType.RATING_BOOST,
         "effect_value": 0.5,
-        "description": "R+0.5 in qualifying (Q3/Q1/Q2 danger only)",
+        "description": "R+0.5 in qualifying (Q3/Q1/Q2 danger only) (只激活一次)",
         "parser": "parse_qualifying_with_danger",
         "conditions": {"requires_danger": True},
+        "max_activations": 1,
     },
     "刘一圈": {
         "name_en": "HamiltonOneLap",
         "category": SkillCategory.QUALIFYING,
-        "trigger": SkillTrigger.PENDING,  # Still pending
+        "trigger": SkillTrigger.QUALIFYING_ANY,
         "effect_type": SkillEffectType.RATING_BOOST,
         "effect_value": 0.5,
-        "description": "[PENDING] R+0.5 in qualifying (Q3/Q1/Q2 danger only)",
+        "description": "R+0.5 in qualifying (Q3/Q1/Q2 danger only) (只激活一次)",
         "parser": "parse_qualifying_with_danger",
         "conditions": {"requires_danger": True},
+        "max_activations": 1,
     },
     "排位神车": {
         "name_en": "QualifyingGodCar",
@@ -100,8 +104,9 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.QUALIFYING_ANY,
         "effect_type": SkillEffectType.RATING_BOOST,
         "effect_value": 0.8,
-        "description": "R+0.8 in qualifying",
+        "description": "R+0.8 in qualifying (只激活一次)",
         "parser": "parse_simple_boost",
+        "max_activations": 1,
     },
     # Defense skills
     "Smooth Operator": {
@@ -110,9 +115,10 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.DEFENDING,
         "effect_type": SkillEffectType.DEFENSE_BONUS,
         "effect_value": 0.3,
-        "description": "R+0.3 when defending, additional +0.3 in train",
+        "description": "R+0.3 when defending, additional +0.3 in train (只激活一次)",
         "parser": "parse_defense_with_train",
         "conditions": {"base_bonus": 0.3, "train_bonus": 0.3},
+        "max_activations": 1,
     },
     "WIDELONSO": {
         "name_en": "WideAlonso",
@@ -120,9 +126,10 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.DEFENDING,
         "effect_type": SkillEffectType.DEFENSE_BONUS,
         "effect_value": 0.8,
-        "description": "R+0.8 when defending, check vehicle damage after 10 consecutive defenses",
+        "description": "R+0.8 when defending, check vehicle damage after 10 consecutive defenses (每次处于ot模式只激活一次)",
         "parser": "parse_defense_with_dice_check",
         "conditions": {"consecutive_defenses_threshold": 10},
+        "max_activations": 1,
     },
     "狮子": {
         "name_en": "Lion",
@@ -130,8 +137,9 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.DEFENDING,
         "effect_type": SkillEffectType.DEFENSE_BONUS,
         "effect_value": 0.5,
-        "description": "R+0.5 when defending, ignores team orders",
+        "description": "R+0.5 when defending, ignores team orders (只激活一次)",
         "parser": "parse_simple_defense",
+        "max_activations": 1,
     },
     "WIDEZHOU": {
         "name_en": "WideZhou",
@@ -148,9 +156,10 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.DEFENDING,
         "effect_type": SkillEffectType.DEFENSE_BONUS,
         "effect_value": 0.8,
-        "description": "R+0.8 when defending, risk of double line change penalty",
+        "description": "R+0.8 when defending, risk of double line change penalty (只激活一次)",
         "parser": "parse_defense_with_dice_check",
         "conditions": {"risk_penalty": True},
+        "max_activations": 1,
     },
     # Overtake skills
     "振金超车": {
@@ -159,7 +168,7 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.ATTACKING,
         "effect_type": SkillEffectType.EXTRA_DICE_CHECK,
         "effect_value": 0.5,
-        "description": "振金流程: 10% dice for R boost + 10% dice opponent unaware = 1% indestructible overtake. R+0.5, pushes opponent out, self unharmed",
+        "description": "振金流程: 10% dice for R boost + 10% dice opponent unaware = 1% indestructible overtake. R+0.5, pushes opponent out, self unharmed (只激活一次)",
         "parser": "parse_indestructible_overtake",
         "conditions": {
             "r_boost_chance": 0.10,  # 10% for R boost dice
@@ -169,6 +178,7 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "pushes_opponent_out": True,
             "self_unharmed": True,
         },
+        "max_activations": 1,
     },
     "极限哥": {
         "name_en": "LimitMaster",
@@ -176,9 +186,10 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.DRS_ZONE_EXTENDED,
         "effect_type": SkillEffectType.EXTRA_DICE_CHECK,
         "effect_value": 0.5,
-        "description": "R+0.5 in DRS zone for 3+ laps, Ra10 check for deformation",
+        "description": "R+0.5 in DRS zone for 3+ laps, Ra10 check for deformation (只激活一次)",
         "parser": "parse_drs_with_deformation_check",
         "conditions": {"min_drs_laps": 3, "deformation_check": "Ra10"},
+        "max_activations": 1,
     },
     "斗小牛士": {
         "name_en": "BullFighter",
@@ -186,8 +197,9 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.EVERY_RACE,
         "effect_type": SkillEffectType.RATING_BOOST,
         "effect_value": 0.5,
-        "description": "R+0.5 constant bonus",
+        "description": "R+0.5 constant bonus (只激活1次)",
         "parser": "parse_simple_boost",
+        "max_activations": 1,
     },
     "武士道！": {
         "name_en": "Bushido",
@@ -195,9 +207,10 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.EVERY_RACE,
         "effect_type": SkillEffectType.EXTRA_DICE_CHECK,
         "effect_value": 1.0,
-        "description": "R+1 but extra dice for next overtake point mistake",
+        "description": "R+1 but extra dice for next overtake point mistake (只激活一次)",
         "parser": "parse_boost_with_extra_dice",
         "conditions": {"base_bonus": 1.0, "dice_check": "next_overtake"},
+        "max_activations": 1,
     },
     "我也是舒马赫": {
         "name_en": "AlsoSchumacher",
@@ -205,9 +218,10 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.EVERY_RACE,
         "effect_type": SkillEffectType.EXTRA_DICE_CHECK,
         "effect_value": 1.0,
-        "description": "R+1 but extra dice for next overtake point mistake",
+        "description": "R+1 but extra dice for next overtake point mistake (只激活一次)",
         "parser": "parse_boost_with_extra_dice",
         "conditions": {"base_bonus": 1.0, "dice_check": "next_overtake"},
+        "max_activations": 1,
     },
     # Tire management
     "保胎大师": {
@@ -216,8 +230,9 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.TIRE_CLIFF,
         "effect_type": SkillEffectType.TIRE_MODIFIER,
         "effect_value": -0.3,
-        "description": "-0.3 R loss after tire cliff point",
+        "description": "-0.3 R loss after tire cliff point (只激活一次，换胎后恢复原数值)",
         "parser": "parse_tire_cliff",
+        "max_activations": 1,
     },
     # Start skills
     "昏厥起步": {
@@ -226,12 +241,13 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.START,
         "effect_type": SkillEffectType.RATING_PENALTY,
         "effect_value": -0.5,
-        "description": "R-0.5 at start, 10% dice chance (improves over time)",
+        "description": "R-0.5 at start, 10% dice chance (improves over time) (只在起步时判定，只激活一次)",
         "parser": "parse_start_penalty_with_improvement",
         "conditions": {
             "initial_chance": 0.10,
             "improvement_stages": [0.05, 0.02, 0.01],
         },
+        "max_activations": 1,
     },
     # Team order skills (some pending)
     "团队精神": {
@@ -251,9 +267,10 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.HELPING_TEAMMATE,
         "effect_type": SkillEffectType.RATING_BOOST,
         "effect_value": 1.0,
-        "description": "R+1 when helping Zhou or following team orders",
+        "description": "R+1 when helping Zhou or following team orders (只激活一次)",
         "parser": "parse_help_teammate",
         "conditions": {"teammate": "Zhou"},
+        "max_activations": 1,
     },
     "车手都是自私的": {
         "name_en": "SelfishDriver",
@@ -261,9 +278,10 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.BEHIND_TEAMMATE,
         "effect_type": SkillEffectType.RATING_BOOST,
         "effect_value": 0.5,
-        "description": "R+0.5 when behind Leclerc with direct threat",
+        "description": "R+0.5 when behind Leclerc with direct threat (只启动一次)",
         "parser": "parse_behind_teammate",
         "conditions": {"teammate": "Leclerc", "requires_threat": True},
+        "max_activations": 1,
     },
     # Vehicle control
     "拉力传承": {
@@ -282,8 +300,9 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.EVERY_RACE,
         "effect_type": SkillEffectType.RATING_BOOST,
         "effect_value": 0.8,
-        "description": "R+0.8 from car synergy",
+        "description": "R+0.8 from car synergy (只激活一次)",
         "parser": "parse_simple_boost",
+        "max_activations": 1,
     },
     "冰人继承人": {
         "name_en": "IcemanInheritor",
@@ -302,12 +321,13 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.EVERY_RACE_RANDOM,
         "effect_type": SkillEffectType.RATING_BOOST,
         "effect_value": 0.0,  # Variable: -0.5 to +0.5
-        "description": "Random R change per race: -0.5, -0.3, 0, +0.3, +0.5",
+        "description": "Random R change per race: -0.5, -0.3, 0, +0.3, +0.5 (只激活一次)",
         "parser": "parse_random_r_change",
         "conditions": {
             "possible_values": [-0.5, -0.3, 0.0, 0.3, 0.5],
             "cancel_if_car_90_plus": True,
         },
+        "max_activations": 1,
     },
     "嗦球队": {
         "name_en": "SuckBallTeam",
@@ -315,9 +335,10 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.VS_SPECIFIC_DRIVER,
         "effect_type": SkillEffectType.RATING_BOOST,
         "effect_value": 0.5,
-        "description": "R+0.5 against Magnussen specifically",
+        "description": "R+0.5 against Magnussen specifically (只激活一次)",
         "parser": "parse_vs_driver",
         "conditions": {"target_driver": "Magnussen"},
+        "max_activations": 1,
     },
     "总导演": {
         "name_en": "ChiefDirector",
@@ -325,8 +346,9 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.EVERY_RACE_RANDOM,
         "effect_type": SkillEffectType.CAUSE_INCIDENT,
         "effect_value": 0.0,
-        "description": "Dice chance to cause incidents",
+        "description": "每站一个骰子确定1d10>5会整活（只激活一次）",
         "parser": "parse_incident_causing",
+        "max_activations": 1,
     },
     "抽象怪": {
         "name_en": "Abstract",
@@ -334,7 +356,7 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "trigger": SkillTrigger.EVERY_RACE,
         "effect_type": SkillEffectType.RATING_BOOST,
         "effect_value": 0.5,
-        "description": "After Spain GP, Piastri recognizes Leclerc as godfather. Both get R+0.5 and immunity to incidents/critical failures (not at Australian GP)",
+        "description": "After Spain GP, Piastri recognizes Leclerc as godfather. Both get R+0.5 and immunity to incidents/critical failures (not at Australian GP) (只激活一次)",
         "parser": "parse_godfather_bonus",
         "conditions": {
             "activation_race": "Spain",  # Skill activates AFTER this race
@@ -344,6 +366,7 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "immunity": ["incidents", "critical_failures"],
             "track_restriction": "NotAustralia",  # Doesn't work at Australian GP
         },
+        "max_activations": 1,
     },
     # Other skills
     "大旗": {
@@ -370,9 +393,10 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "category": SkillCategory.SPECIAL,
         "trigger": SkillTrigger.EVERY_RACE,
         "effect_type": SkillEffectType.RATING_BOOST,
-        "effect_value": 1.0,
-        "description": "R+1 as substitute driver",
-        "parser": "parse_simple_boost",
+        "effect_value": 0.0,  # Variable: 1d10 * 0.1 = 0.1 to 1.0
+        "description": "R+0.1*1d10 as substitute driver (只激活一次)",
+        "parser": "parse_substitute_bonus",
+        "max_activations": 1,
     },
 }
 
@@ -427,6 +451,8 @@ def parse_skill(
         effect_value=definition.get("effect_value", 0.0),
         conditions=definition.get("conditions", {}),
         dice_requirement=_parse_dice_requirement(definition),
+        max_activations=definition.get("max_activations", None),
+        cooldown_laps=definition.get("cooldown_laps", 0),
     )
 
 

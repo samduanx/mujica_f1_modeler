@@ -122,6 +122,7 @@ class SprintRaceSimulator:
         driver_data: Dict[str, Dict],
         random_seed: Optional[int] = None,
         output_dir: Optional[str] = None,
+        grid_positions: Optional[Dict[str, int]] = None,
     ):
         """
         Initialize sprint race simulator.
@@ -131,6 +132,7 @@ class SprintRaceSimulator:
             driver_data: Dictionary of driver data
             random_seed: Optional random seed for reproducibility
             output_dir: Optional output directory for saving results
+            grid_positions: Optional dict mapping driver_name -> grid_position from Sprint Qualifying
         """
         self.track_name = track_name
         self.output_dir = output_dir
@@ -141,6 +143,7 @@ class SprintRaceSimulator:
         self.num_laps = self.track_config["sprint_laps"]
         self.base_lap_time = self.track_config["base_lap_time"]
         self.driver_data = driver_data
+        self.grid_positions = grid_positions or {}  # From Sprint Qualifying
 
         # Set random seed
         if random_seed is not None:
@@ -209,12 +212,23 @@ class SprintRaceSimulator:
                 "interval": 0.0,
             }
 
-        # Set initial grid positions (random for now - would come from qualifying)
-        drivers_list = list(self.driver_data.keys())
-        random.shuffle(drivers_list)
-        for i, driver in enumerate(drivers_list, 1):
-            self.results[driver]["GridPosition"] = i
-            self.results[driver]["Position"] = i
+        # Set initial grid positions from Sprint Qualifying if available
+        # Otherwise use random grid (fallback)
+        if self.grid_positions:
+            # Use grid positions from Sprint Qualifying
+            print(f"  Using Sprint Qualifying grid positions")
+            for driver in self.driver_data.keys():
+                grid_pos = self.grid_positions.get(driver, 999)
+                self.results[driver]["GridPosition"] = grid_pos
+                self.results[driver]["Position"] = grid_pos
+        else:
+            # Fallback: random grid (should not happen in full weekend mode)
+            print(f"  No Sprint Qualifying results - using random grid")
+            drivers_list = list(self.driver_data.keys())
+            random.shuffle(drivers_list)
+            for i, driver in enumerate(drivers_list, 1):
+                self.results[driver]["GridPosition"] = i
+                self.results[driver]["Position"] = i
 
         # Simulate each lap
         for lap in range(1, self.num_laps + 1):
@@ -494,6 +508,7 @@ def run_sprint_race(
     driver_data: Optional[Dict[str, Dict]] = None,
     seed: Optional[int] = None,
     output_dir: Optional[str] = None,
+    grid_positions: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Any]:
     """
     Run a sprint race simulation.
@@ -503,6 +518,7 @@ def run_sprint_race(
         driver_data: Optional driver data dictionary. If None, uses default Spain GP data.
         seed: Optional random seed for reproducibility
         output_dir: Optional output directory. If provided, saves results there.
+        grid_positions: Optional dict mapping driver_name -> grid_position from Sprint Qualifying
 
     Returns:
         Dictionary containing race results
@@ -557,6 +573,7 @@ def run_sprint_race(
         driver_data=driver_data,
         random_seed=seed,
         output_dir=output_dir,
+        grid_positions=grid_positions,
     )
 
     return simulator.simulate_sprint()

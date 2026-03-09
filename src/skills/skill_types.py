@@ -29,6 +29,9 @@ class SkillTrigger(Enum):
     # Race situations
     DEFENDING = auto()  # Defending position
     DEFENDING_TRAIN = auto()  # Defending with train forming
+    DEFENDING_MULTI_CAR_TRAIN = (
+        auto()
+    )  # Defending in multi-car train (3+ cars within 1s)
     ATTACKING = auto()  # Attacking/overtaking
     IN_DRS_ZONE = auto()  # In DRS zone
     DRS_ZONE_EXTENDED = auto()  # In DRS zone for 3+ laps

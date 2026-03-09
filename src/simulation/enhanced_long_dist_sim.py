@@ -195,7 +195,7 @@ def read_driver_data(csv_file: str) -> dict:
                     driver_info = {
                         "Team": row.get("Team", ""),
                         "R_Value": float(row.get("R_Value", 300)),
-                        "DR_Value": float(row.get("DR_Value", 0)),
+                        "DR_Value": float(row.get("DR", 0)),
                     }
                     # Read GridPosition if present (from qualifying/sprint results)
                     grid_pos = row.get("GridPosition")
@@ -373,11 +373,33 @@ def calculate_start_lap_delta(
     return base_delta, 0.5
 
 
-def calculate_base_lap_time(r_value: float, track_name: str) -> float:
-    """Calculate base lap time based on R value and track."""
-    base_time = TRACK_BASE_LAP_TIMES.get(track_name.lower(), (88.0, 300))[0]
-    adjustment = (r_value - 300) * 0.01
-    return base_time + adjustment
+def calculate_base_lap_time(
+    dr_value: float,
+    team_pr: float,
+    track_name: str,
+) -> float:
+    """Calculate base lap time based on R = DR * PR / 100 formula.
+
+    R value determines the base lap time. Higher R = faster lap.
+
+    Args:
+        dr_value: Driver DR value (driver rating)
+        team_pr: Team PR value (car performance rating)
+        track_name: Track name
+    """
+    base_time, _ = TRACK_BASE_LAP_TIMES.get(track_name.lower(), (88.0, 300))
+
+    # Calculate R value using the formula: R = DR * PR / 100
+    r_value = dr_value * team_pr / 100.0
+
+    # Calculate lap time based on R value
+    # Reference R value of 300 gives base_time
+    # Higher R = faster time (lower lap_time)
+    factor = 0.01  # Coefficient for adjustments
+    adjustment = (r_value - 300.0) * factor
+    lap_time = base_time - adjustment
+
+    return lap_time
 
 
 def calculate_degradation_with_cliff(
@@ -387,12 +409,18 @@ def calculate_degradation_with_cliff(
     r_max: float,
     track_chars: dict,
     pit_lap_count: int,
+    team_pr: float = None,
+    pr_min: float = None,
+    pr_max: float = None,
 ) -> float:
-    """Calculate tire degradation with cliff effect."""
+    """Calculate tire degradation with cliff effect.
+
+    PR (car performance) affects tire management - better cars manage tires better.
+    """
     tyre_params = get_universal_tyre_params_with_cliff()
     compound_params = tyre_params.get(tyre_compound, tyre_params["MEDIUM"])
 
-    # Non-linear scaling
+    # Non-linear scaling based on R value (driver skill)
     scaled_lap = nonlinear_scaling(r_value, compound_params["base_lap"], r_max)
 
     # Track characteristics compensation
@@ -401,6 +429,18 @@ def calculate_degradation_with_cliff(
 
     # Base degradation rate
     base_degradation = compound_params["base_degradation"] * wear_factor
+
+    # PR (car) affects tire management - better car = slower degradation
+    pr_factor = 1.0
+    if (
+        team_pr is not None
+        and pr_min is not None
+        and pr_max is not None
+        and pr_max > pr_min
+    ):
+        pr_normalized = (team_pr - pr_min) / (pr_max - pr_min)  # 0 to 1
+        # Better car (higher PR) reduces degradation by up to 20%
+        pr_factor = 1.0 - pr_normalized * 0.2
 
     # Cliff effect
     cliff_lap = compound_params["cliff_lap"]
@@ -411,20 +451,70 @@ def calculate_degradation_with_cliff(
     else:
         cliff_factor = 1.0
 
-    # Calculate cumulative degradation
-    degradation = base_degradation * (lap_number / scaled_lap) * cliff_factor
+    # Calculate cumulative degradation with PR factor
+    degradation = (
+        base_degradation * (lap_number / scaled_lap) * cliff_factor * pr_factor
+    )
 
     return degradation
 
 
 def calculate_dr_based_std(
-    dr_value: float, dr_min: float, dr_max: float, base_std: float = 0.45
-) -> float:
-    """Calculate DR-based standard deviation."""
-    if dr_max == dr_min:
-        return base_std
-    dr_normalized = (dr_value - dr_min) / (dr_max - dr_min)
-    return base_std * (1.0 - dr_normalized * 0.3)
+    dr_value: float,
+    dr_min: float,
+    dr_max: float,
+    base_std: float = 0.08,
+    previous_bias: float = 0.0,
+    markov_factor: float = 0.6,
+) -> Tuple[float, float]:
+    """
+    Calculate noise standard deviation based on DR (driver stability).
+
+    DR represents driver consistency - higher DR means more stable lap times.
+
+    Args:
+        dr_value: Driver DR value (stability/consistency rating)
+        dr_min, dr_max: Range of DR values
+        base_std: Base standard deviation
+        previous_bias: Previous lap's noise bias (for Markov process)
+        markov_factor: How much previous bias carries over (0-1)
+
+    Returns:
+        Tuple of (std_deviation, new_bias) for Markov chain
+    """
+    # DR determines noise level: higher DR = lower noise (more consistent)
+    if dr_max != dr_min:
+        dr_normalized = (dr_value - dr_min) / (dr_max - dr_min)
+    else:
+        dr_normalized = 0.5
+
+    # DR tiers for noise levels:
+    # High DR (>=99.5): Very consistent, low noise (0.01-0.02s)
+    # Mid DR (99.0-99.5): Moderate consistency (0.02-0.04s)
+    # Low DR (<99.0): Less consistent, higher noise (0.04-0.08s)
+    if dr_normalized >= 0.75:  # Top 25% - elite consistency
+        effective_base = 0.01 + (1 - dr_normalized) * 0.04  # 0.01-0.02s
+    elif dr_normalized >= 0.4:  # Mid 35% - good consistency
+        effective_base = 0.02 + (0.75 - dr_normalized) * 0.057  # 0.02-0.04s
+    else:  # Bottom 40% - variable consistency
+        effective_base = 0.04 + (0.4 - dr_normalized) * 0.133  # 0.04-0.08s
+
+    # Cap at reasonable limits
+    effective_base = max(0.005, min(effective_base, 0.08))
+
+    # Markov process: bias carries over from previous lap
+    # Driver's "form" persists - consistent drivers maintain form better
+    consistency_factor = 0.5 + dr_normalized * 0.3  # 0.5-0.8 based on DR
+    new_bias = previous_bias * markov_factor * consistency_factor + np.random.normal(
+        0, effective_base * 0.3
+    )
+    # Decay bias over time
+    new_bias *= 0.95
+
+    # Final std
+    final_std = effective_base * 0.9
+
+    return final_std, new_bias
 
 
 def nonlinear_scaling(r_value: float, base_lap: float, r_max: float) -> float:
@@ -1172,6 +1262,10 @@ class RaceState:
         # Faults accumulate and degrade speed over the race
         self.driver_fault_degradation: Dict[str, float] = defaultdict(float)
 
+        # MARKOV NOISE BIAS TRACKING - For driver "form" persistence
+        # Drivers have good/bad form that carries over laps (Point 3 of noise control)
+        self.driver_noise_bias: Dict[str, float] = defaultdict(float)
+
         # DNF (Did Not Finish) TRACKING
         # Tracks drivers who retired from the race
         # driver_name -> lap_dnfed
@@ -1188,6 +1282,13 @@ class RaceState:
         self.last_weather_pit_decision: Dict[
             str, int
         ] = {}  # driver -> lap of last weather pit
+
+        # WEATHER VSC/SC TRACKING - Fix: track if weather VSC/SC has already been triggered
+        # This prevents multiple triggers for the same weather event
+        self.weather_vsc_triggered: bool = False
+        self.weather_sc_triggered: bool = False
+        self.last_weather_trigger_lap: int = 0  # Track lap of last weather trigger
+        self.weather_trigger_cooldown: int = 5  # Minimum laps between weather triggers"
 
     def update_positions(self, driver_times: Dict[str, float]):
         """Update driver positions based on cumulative times."""
@@ -1305,6 +1406,11 @@ class EnhancedRaceSimulator:
 
         # Pit stop data
         self.pitlane_data = load_pitlane_time_data()
+
+        # Load team PR values for race performance calculation
+        from src.utils.config_loader import get_all_teams_pr
+
+        self.team_pr_values = get_all_teams_pr(track_name)
 
         # Track simulation start time for relative timestamps
         self.simulation_start_time: Optional[datetime] = None
@@ -1466,6 +1572,8 @@ class EnhancedRaceSimulator:
                 position=position,
                 gap_to_ahead=gap_to_ahead,
                 gap_to_behind=gap_to_behind,
+                is_first_lap=(lap == 1),
+                is_race_start=(lap <= 2),
             )
 
             # Get adjusted R value from skill manager
@@ -1486,6 +1594,46 @@ class EnhancedRaceSimulator:
                 file=sys.stderr,
             )
             return base_r, []
+
+    def _create_driver_incident_from_skill(
+        self,
+        driver: str,
+        lap: int,
+        roll_result: int,
+    ):
+        """
+        Create an incident caused by driver's skill (e.g., 总导演 skill).
+
+        Args:
+            driver: Driver who caused the incident
+            lap: Current lap number
+            roll_result: The dice roll result that triggered the incident
+        """
+        # Mark driver as DNF due to skill-triggered incident
+        reason = (
+            f"总导演 (The Director): Skill-triggered incident (roll: {roll_result})"
+        )
+        self.race_state.add_dnf(driver, lap, reason)
+
+        # Log the incident
+        self.dice_logger.log_roll(
+            lap=lap,
+            driver=driver,
+            incident_type="skill_triggered_dnf",
+            dice_type="d10",
+            dice_result=roll_result,
+            outcome="dnf",
+            race_time=self.get_relative_time(),
+            details={
+                "skill_name": "总导演",
+                "skill_name_en": "ChiefDirector",
+                "reason": "Latifi's skill triggered an incident",
+            },
+        )
+
+        print(
+            f"\n*** INCIDENT: {driver} caused an incident due to 总导演 skill (roll: {roll_result}) ***"
+        )
 
     def get_relative_time(self) -> float:
         """Get estimated race time in seconds (time into the race)."""
@@ -1735,6 +1883,9 @@ class EnhancedRaceSimulator:
         Handle race control responses to weather conditions.
 
         Returns race control event if VSC/SC/Red Flag should be deployed.
+
+        FIX: Added tracking to prevent multiple triggers for the same weather event.
+        Only triggers when weather changes from dry to wet, not continuously.
         """
         rc_state = weather_effects.get("rc_state", RaceControlState.GREEN)
 
@@ -1742,25 +1893,45 @@ class EnhancedRaceSimulator:
         if self.race_state.sc_active or self.race_state.vsc_active:
             return None
 
+        # FIX: Check cooldown period between weather triggers
+        # This prevents multiple triggers for the same weather event
+        if (
+            lap - self.race_state.last_weather_trigger_lap
+            < self.race_state.weather_trigger_cooldown
+        ):
+            return None
+
         # Deploy safety car for heavy rain
         if rc_state == RaceControlState.SAFETY_CAR and weather_effects[
             "weather_type"
         ] in [WeatherType.HEAVY_RAIN, WeatherType.TORRENTIAL_RAIN]:
-            return self.handle_safety_car(lap, "Heavy rain conditions")
+            if not self.race_state.weather_sc_triggered:
+                self.race_state.weather_sc_triggered = True
+                self.race_state.last_weather_trigger_lap = lap
+                return self.handle_safety_car(lap, "Heavy rain conditions")
 
         # Deploy VSC for moderate rain with wet track
         if rc_state == RaceControlState.VSC:
-            return self.handle_vsc(lap, "Rain - wet track conditions")
+            if not self.race_state.weather_vsc_triggered:
+                self.race_state.weather_vsc_triggered = True
+                self.race_state.last_weather_trigger_lap = lap
+                return self.handle_vsc(lap, "Rain - wet track conditions")
 
         # Red flag for torrential rain
         if rc_state == RaceControlState.RED_FLAG:
             print(f"\n*** RED FLAG at Lap {lap}: Torrential rain conditions ***")
             self.race_state.red_flag_active = True
+            self.race_state.last_weather_trigger_lap = lap
             return {
                 "type": "red_flag",
                 "lap": lap,
                 "reason": "Torrential rain - unsafe conditions",
             }
+
+        # Reset trigger flags when weather clears (returns to GREEN)
+        if rc_state == RaceControlState.GREEN:
+            self.race_state.weather_vsc_triggered = False
+            self.race_state.weather_sc_triggered = False
 
         return None
 
@@ -1878,8 +2049,10 @@ class EnhancedRaceSimulator:
             launch_roll = roll_d10()
 
             # Check for poor start (wheelspin or mistakes)
-            if launch_roll == 1:  # Major mistake - significant time loss
-                start_delta += random.uniform(1.5, 3.0)
+            # 限制起步骰子的位置变化幅度：最多上升/下降2-3位
+            # 每位差距约0.15秒，所以限制时间变化范围
+            if launch_roll == 1:  # Major mistake - 最多下降2-3位
+                start_delta += random.uniform(0.3, 0.5)  # 限制损失，约2-3位
                 start_outcome = "major_mistake"
                 self.dice_logger.log_roll(
                     lap=0,
@@ -1893,10 +2066,11 @@ class EnhancedRaceSimulator:
                         "grid_position": grid_pos,
                         "reaction_roll": reaction_roll,
                         "reaction_time": reaction_time,
+                        "max_positions_lost": "2-3",
                     },
                 )
-            elif launch_roll == 2:  # Minor wheelspin
-                start_delta += random.uniform(0.5, 1.5)
+            elif launch_roll == 2:  # Minor wheelspin - 最多下降1-2位
+                start_delta += random.uniform(0.15, 0.3)  # 限制损失，约1-2位
                 start_outcome = "wheelspin"
                 self.dice_logger.log_roll(
                     lap=0,
@@ -1909,10 +2083,11 @@ class EnhancedRaceSimulator:
                     details={
                         "grid_position": grid_pos,
                         "reaction_roll": reaction_roll,
+                        "max_positions_lost": "1-2",
                     },
                 )
-            elif launch_roll >= 9:  # Excellent launch - gaining positions
-                start_delta -= random.uniform(0.3, 0.8)
+            elif launch_roll >= 9:  # Excellent launch - 最多上升2-3位
+                start_delta -= random.uniform(0.3, 0.45)  # 限制收益，约2-3位
                 start_outcome = "excellent_launch"
                 self.dice_logger.log_roll(
                     lap=0,
@@ -2429,7 +2604,7 @@ class EnhancedRaceSimulator:
             driver, driver_info["R_Value"], lap, is_raining, position, results
         )
 
-        # Log skill activations
+        # Log skill activations and handle extra_dice_required
         if skill_activations:
             for activation in skill_activations:
                 self.skill_activations.append(activation)
@@ -2451,12 +2626,48 @@ class EnhancedRaceSimulator:
                     },
                 )
 
-        # Calculate base lap time using adjusted R value
-        base_lap_time = calculate_base_lap_time(adjusted_r, self.track_name)
+                # Handle extra_dice_required (e.g., incident creation)
+                extra_dice = activation.get("extra_dice_required")
+                if extra_dice and extra_dice.get("type") == "incident_caused":
+                    # Create an incident for the driver (总导演 skill)
+                    self._create_driver_incident_from_skill(
+                        driver, lap, extra_dice.get("result", 0)
+                    )
+                elif extra_dice and extra_dice.get("type") == "chief_director_incident":
+                    # Handle 总导演 incident - only affect specified drivers
+                    will_interfere = extra_dice.get("will_interfere", False)
+                    affected_drivers = extra_dice.get("affected_drivers", [driver])
 
-        # Calculate degradation using base R value (not adjusted_r)
-        # This is intentional: skills affect lap times but not tire wear patterns
+                    if will_interfere:
+                        # Only create incidents for affected drivers (Latifi + overtaking/blue flag)
+                        for affected_driver in affected_drivers:
+                            if affected_driver in self.driver_data:
+                                self._create_driver_incident_from_skill(
+                                    affected_driver,
+                                    lap,
+                                    extra_dice.get("interference_roll", 0),
+                                )
+
+        # Calculate base lap time using R = DR * PR / 100 formula
+        team = self.driver_teams.get(driver, "Unknown")
+        team_pr = self.team_pr_values.get(team, 300.0)  # Default PR if not found
+
+        # Get driver's DR value
+        dr_value = driver_info.get("DR_Value", 100.0)
+
+        base_lap_time = calculate_base_lap_time(dr_value, team_pr, self.track_name)
+
+        # Calculate degradation - PR (car) affects tire management
+        # Better car = better tire management = slower degradation
         r_max = max(d["R_Value"] for d in self.driver_data.values())
+
+        # Get PR range for degradation calculation
+        if self.team_pr_values:
+            pr_min_val = min(self.team_pr_values.values())
+            pr_max_val = max(self.team_pr_values.values())
+        else:
+            pr_min_val, pr_max_val = 290, 310
+
         degradation = calculate_degradation_with_cliff(
             lap_count_on_tyre,
             current_tyre,
@@ -2464,18 +2675,36 @@ class EnhancedRaceSimulator:
             r_max,
             self.track_chars,
             len(pit_laps),
+            team_pr,
+            pr_min_val,
+            pr_max_val,
         )
 
-        # Calculate DR-based noise
+        # Calculate noise based on DR (driver stability/consistency)
         dr_values = [d["DR_Value"] for d in self.driver_data.values()]
         dr_min = min(dr_values)
         dr_max = max(dr_values)
-        noise_std = calculate_dr_based_std(
-            driver_info["DR_Value"], dr_min, dr_max, 0.45
+
+        # Get previous bias for this driver (Markov process state)
+        previous_bias = self.race_state.driver_noise_bias.get(driver, 0.0)
+
+        # Calculate noise std based on DR - higher DR = more consistent = lower noise
+        noise_std, new_bias = calculate_dr_based_std(
+            driver_info["DR_Value"],
+            dr_min,
+            dr_max,
+            0.08,
+            previous_bias,
+            markov_factor=0.6,
         )
 
-        # Add lap 1 start delta
-        lap_time = base_lap_time + degradation * 10 + np.random.normal(0, noise_std)
+        # Update bias for next lap (Markov chain state)
+        self.race_state.driver_noise_bias[driver] = new_bias
+
+        # Generate lap time with Markov bias as mean shift
+        # Top drivers maintain consistency better due to lower variance
+        lap_noise = np.random.normal(new_bias, noise_std)
+        lap_time = base_lap_time + degradation * 10 + lap_noise
 
         if lap == 1:
             lap_time += start_delta
@@ -3121,7 +3350,7 @@ class EnhancedRaceSimulator:
                     self.race_state.chequered_flag_shown = True
                     self.race_state.chequered_flag_lap = lap
                     self.race_state.leader_finished = True
-                    print(f"\n🏁 CHEQUERED FLAG: {leader_driver} wins the race!")
+                    print(f"\n[CHEQUERED FLAG] {leader_driver} wins the race!")
 
             # Monaco-specific: Add overtake resistance (Fix 2a)
             # At Monaco, it's very hard to overtake, so we add a small bonus
@@ -3205,23 +3434,22 @@ class EnhancedRaceSimulator:
             print(f"\n=== Strategic Decisions Summary ===")
             print("  No strategic decisions recorded.")
 
-        # Calculate final results: sort by laps_completed (desc), then cumulative_time (asc)
-        # This ensures drivers who completed more laps rank higher (correct F1 race result logic)
-        final_results = sorted(
-            results.items(),
-            key=lambda x: (-x[1]["laps_completed"], x[1]["cumulative_time"]),
-        )
-
-        # Calculate lap deficits for lapped cars and store in race_state
+        # Calculate lap deficits for lapped cars BEFORE final sorting
         # In F1, a driver is lapped if they haven't completed as many laps as the leader
         # when the chequered flag is shown. We simulate this by comparing cumulative times.
-        if final_results:
-            leader_driver, leader_result = final_results[0]
+        # First, find the leader
+        if results:
+            # Find provisional leader (most laps completed, then lowest cumulative time)
+            provisional_leader = min(
+                results.items(),
+                key=lambda x: (-x[1]["laps_completed"], x[1]["cumulative_time"]),
+            )
+            leader_driver, leader_result = provisional_leader
             leader_laps = leader_result["laps_completed"]
             leader_time = leader_result["cumulative_time"]
             avg_lap_time = leader_time / leader_laps if leader_laps > 0 else 90.0
 
-            for driver, result in final_results:
+            for driver, result in results.items():
                 # Calculate effective laps based on cumulative time
                 # If a driver's cumulative time is significantly behind, they've been lapped
                 time_gap = result["cumulative_time"] - leader_time
@@ -3242,10 +3470,19 @@ class EnhancedRaceSimulator:
                 if laps_down > 0:
                     self.race_state.driver_lap_deficit[driver] = laps_down
                     result["laps_down"] = laps_down
-                    # Adjust laps_completed to reflect actual race position
-                    result["laps_completed"] = leader_laps - laps_down
+                    # Adjust laps_completed to reflect being lapped
+                    # This is the key fix: reduce laps_completed for lapped cars
+                    result["laps_completed"] = max(1, leader_laps - laps_down)
                 else:
                     result["laps_down"] = 0
+
+        # Calculate final results: sort by laps_completed (desc), then cumulative_time (asc)
+        # This ensures drivers who completed more laps rank higher (correct F1 race result logic)
+        # CRITICAL: This sort must happen AFTER laps_down correction is applied
+        final_results = sorted(
+            results.items(),
+            key=lambda x: (-x[1]["laps_completed"], x[1]["cumulative_time"]),
+        )
 
         # Calculate intervals (gap to leader)
         leader_time = None

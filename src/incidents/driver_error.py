@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 class DriverErrorType(Enum):
     """Types of driver errors"""
+
     LOCKED_BRAKES = "locked_brakes"
     OFF_TRACK = "off_track"
     CORNER_MISTAKE = "corner_mistake"
@@ -79,6 +80,7 @@ class DriverErrorProbability:
         race_position: int,
         under_pressure: bool,
         is_first_lap: bool = False,
+        r_value: float = None,
     ) -> float:
         """
         Calculate error probability for a driver.
@@ -90,16 +92,31 @@ class DriverErrorProbability:
             race_position: Current position (1 = leader)
             under_pressure: Being pressured by car behind
             is_first_lap: Whether this is the first lap
+            r_value: Driver's R value (100.5 = elite, <99 = lower tier)
 
         Returns:
             Error probability (0.0 to 1.0)
         """
-        prob = self.BASE_ERROR_PROB
+        # R-value based error control: Elite drivers (R>=100) almost never make errors
+        if r_value is not None:
+            if r_value >= 100.0:
+                # Elite drivers: Virtually no errors (0.1% chance)
+                return 0.001
+            elif r_value >= 99.5:
+                # Good drivers: Very low error rate (0.5% chance)
+                base_prob = 0.005
+            else:
+                # Lower tier drivers: Normal error rate
+                base_prob = self.BASE_ERROR_PROB
+        else:
+            base_prob = self.BASE_ERROR_PROB
 
-        # DR modifier - higher DR = lower error probability
-        # Formula: Base - (DR - 80) * factor
-        dr_factor = (dr_value - 80) / 40  # DR 92 = 0.3 reduction
-        prob -= dr_factor * 0.02  # Max reduction of 0.02
+        prob = base_prob
+
+        # DR modifier - higher DR = lower error probability (only for lower tier drivers)
+        if r_value is None or r_value < 100.0:
+            dr_factor = (dr_value - 80) / 40
+            prob -= dr_factor * 0.02
 
         # Tyre degradation factor
         if tyre_degradation > 1.2:
@@ -111,13 +128,13 @@ class DriverErrorProbability:
         if race_position <= 3:
             prob *= 0.8
         elif race_position >= 15:
-            prob *= 1.2  # Backmarkers make more errors
+            prob *= 1.2
 
         # Pressure factor
         if under_pressure:
             prob *= 1.3
 
-        # Lap factor - first laps have more errors
+        # Lap factor
         if is_first_lap:
             prob *= 1.5
         elif lap_number <= 3:
@@ -163,12 +180,26 @@ class DriverErrorResolver:
         DriverErrorType.BRAKING_POINT_ERROR: "{driver} gets the braking point wrong",
     }
 
-    # Severity settings
+    # Severity settings - REDUCED PENALTIES
+    # Position penalties reduced from -1/-2/-3 to 0/-1/-1
+    # Focus on time penalties rather than position drops
     SEVERITY_SETTINGS = {
-        ErrorSeverity.MINOR: {"time_penalty": 0.5, "position_impact": 0},
-        ErrorSeverity.MODERATE: {"time_penalty": 1.5, "position_impact": -1},
-        ErrorSeverity.MAJOR: {"time_penalty": 3.0, "position_impact": -2},
-        ErrorSeverity.SEVERE: {"time_penalty": 5.0, "position_impact": -3},
+        ErrorSeverity.MINOR: {
+            "time_penalty": 0.5,
+            "position_impact": 0,
+        },  # No position loss
+        ErrorSeverity.MODERATE: {
+            "time_penalty": 1.5,
+            "position_impact": 0,
+        },  # Reduced: was -1
+        ErrorSeverity.MAJOR: {
+            "time_penalty": 3.0,
+            "position_impact": -1,
+        },  # Reduced: was -2
+        ErrorSeverity.SEVERE: {
+            "time_penalty": 5.0,
+            "position_impact": -1,
+        },  # Reduced: was -3
     }
 
     def __init__(self, dice_roller: Optional["DiceRoller"] = None):

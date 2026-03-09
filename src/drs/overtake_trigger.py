@@ -11,8 +11,236 @@ without a fixed overtake limit. Overtakes occur based on:
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Set
 import random
+
+
+# ============================================================================
+# Multi-Car Train Detection
+# ============================================================================
+
+
+@dataclass
+class MultiCarTrain:
+    """
+    Represents a multi-car train (3+ cars within 1 second of each other).
+
+    Attributes:
+        drivers: List of driver names in the train (in position order)
+        gaps: List of gaps between consecutive drivers
+        size: Number of cars in the train
+        leader: Name of the lead driver
+        tail: Name of the tail driver
+    """
+
+    drivers: List[str]
+    gaps: List[float]
+
+    def __post_init__(self):
+        self.size = len(self.drivers)
+        self.leader = self.drivers[0] if self.drivers else None
+        self.tail = self.drivers[-1] if self.drivers else None
+
+    def contains_driver(self, driver_name: str) -> bool:
+        """Check if a driver is part of this train."""
+        return driver_name in self.drivers
+
+    def is_attacker_in_train(self, attacker: str, defender: str) -> bool:
+        """Check if an attacker-defender pair is part of this train."""
+        if not self.contains_driver(attacker) or not self.contains_driver(defender):
+            return False
+        # Check if they are consecutive in the train
+        try:
+            attacker_idx = self.drivers.index(attacker)
+            defender_idx = self.drivers.index(defender)
+            # In a train, the attacker should be behind the defender
+            return attacker_idx == defender_idx + 1
+        except ValueError:
+            return False
+
+
+class MultiCarTrainDetector:
+    """
+    Detector for multi-car trains (3+ cars within 1 second).
+
+    This detector caches results per lap to avoid performance issues
+    when called multiple times during a single lap.
+    """
+
+    # Gap threshold for forming a train (seconds)
+    TRAIN_GAP_THRESHOLD = 1.0
+
+    # Minimum cars to form a train
+    MIN_TRAIN_SIZE = 3
+
+    def __init__(self):
+        self._cached_lap: Optional[int] = None
+        self._cached_trains: List[MultiCarTrain] = []
+        self._driver_train_map: Dict[str, MultiCarTrain] = {}
+
+    def detect_trains(
+        self,
+        driver_positions: List[Tuple[str, float]],
+        current_lap: int,
+    ) -> List[MultiCarTrain]:
+        """
+        Detect all multi-car trains in the current race state.
+
+        Args:
+            driver_positions: List of (driver_name, cumulative_time) tuples,
+                              sorted by position (leader first)
+            current_lap: Current lap number for caching
+
+        Returns:
+            List of MultiCarTrain objects representing detected trains
+        """
+        # Check cache
+        if self._cached_lap == current_lap and self._cached_trains:
+            return self._cached_trains
+
+        trains = []
+        self._driver_train_map = {}
+
+        if len(driver_positions) < self.MIN_TRAIN_SIZE:
+            self._cached_lap = current_lap
+            self._cached_trains = trains
+            return trains
+
+        # Find all trains using sliding window approach
+        # A train is a consecutive sequence of 3+ cars where each gap <= 1.0s
+        i = 0
+        while i < len(driver_positions) - 1:
+            # Start a potential train
+            train_drivers = [driver_positions[i][0]]
+            train_gaps = []
+
+            # Extend train while gaps are within threshold
+            j = i
+            while j < len(driver_positions) - 1:
+                gap = driver_positions[j + 1][1] - driver_positions[j][1]
+                if gap <= self.TRAIN_GAP_THRESHOLD:
+                    train_drivers.append(driver_positions[j + 1][0])
+                    train_gaps.append(gap)
+                    j += 1
+                else:
+                    break
+
+            # Check if we have a valid train (3+ cars)
+            if len(train_drivers) >= self.MIN_TRAIN_SIZE:
+                train = MultiCarTrain(drivers=train_drivers, gaps=train_gaps)
+                trains.append(train)
+
+                # Map all drivers in train to this train
+                for driver in train_drivers:
+                    self._driver_train_map[driver] = train
+
+                # Move to the car after this train
+                i = j + 1
+            else:
+                i += 1
+
+        # Update cache
+        self._cached_lap = current_lap
+        self._cached_trains = trains
+
+        return trains
+
+    def is_driver_in_train(self, driver_name: str) -> bool:
+        """Check if a driver is currently in any train."""
+        return driver_name in self._driver_train_map
+
+    def get_driver_train(self, driver_name: str) -> Optional[MultiCarTrain]:
+        """Get the train a driver is part of (if any)."""
+        return self._driver_train_map.get(driver_name)
+
+    def is_overtake_in_train(self, attacker: str, defender: str) -> bool:
+        """
+        Check if an overtake attempt is happening within a multi-car train.
+
+        Args:
+            attacker: Name of attacking driver
+            defender: Name of defending driver
+
+        Returns:
+            True if both drivers are in the same multi-car train
+        """
+        train = self._driver_train_map.get(attacker)
+        if train is None:
+            return False
+        return train.is_attacker_in_train(attacker, defender)
+
+    def get_train_size_for_driver(self, driver_name: str) -> int:
+        """Get the size of the train a driver is in (0 if not in train)."""
+        train = self._driver_train_map.get(driver_name)
+        return train.size if train else 0
+
+    def invalidate_cache(self):
+        """Invalidate the cache (call when lap changes)."""
+        self._cached_lap = None
+        self._cached_trains = []
+        self._driver_train_map = {}
+
+
+def detect_multi_car_train(
+    driver_positions: List[Tuple[str, float]],
+    gap_threshold: float = 1.0,
+    min_cars: int = 3,
+) -> List[MultiCarTrain]:
+    """
+    Standalone function to detect multi-car trains.
+
+    Args:
+        driver_positions: List of (driver_name, cumulative_time) tuples,
+                          sorted by position (leader first)
+        gap_threshold: Maximum gap to consider cars in same train (seconds)
+        min_cars: Minimum number of cars to form a train
+
+    Returns:
+        List of MultiCarTrain objects
+
+    Example:
+        >>> positions = [
+        ...     ("Verstappen", 0.0),
+        ...     ("Norris", 0.8),      # gap = 0.8s
+        ...     ("Leclerc", 1.6),     # gap = 0.8s
+        ...     ("Hamilton", 3.0),    # gap = 1.4s - outside train
+        ... ]
+        >>> trains = detect_multi_car_train(positions)
+        >>> len(trains)
+        1
+        >>> trains[0].size
+        3
+        >>> trains[0].drivers
+        ['Verstappen', 'Norris', 'Leclerc']
+    """
+    trains = []
+
+    if len(driver_positions) < min_cars:
+        return trains
+
+    i = 0
+    while i < len(driver_positions) - 1:
+        train_drivers = [driver_positions[i][0]]
+        train_gaps = []
+
+        j = i
+        while j < len(driver_positions) - 1:
+            gap = driver_positions[j + 1][1] - driver_positions[j][1]
+            if gap <= gap_threshold:
+                train_drivers.append(driver_positions[j + 1][0])
+                train_gaps.append(gap)
+                j += 1
+            else:
+                break
+
+        if len(train_drivers) >= min_cars:
+            train = MultiCarTrain(drivers=train_drivers, gaps=train_gaps)
+            trains.append(train)
+            i = j + 1
+        else:
+            i += 1
+
+    return trains
 
 
 # ============================================================================
@@ -135,6 +363,7 @@ class TimeIntervalOvertakeSystem:
     2. Probability per time interval (0.2s)
     3. Dynamic modifiers based on race situation
     4. Clustering prevention (reduce probability after consecutive overtakes)
+    5. Multi-car train detection for special skill activation
     """
 
     def __init__(
@@ -161,6 +390,10 @@ class TimeIntervalOvertakeSystem:
         ] = []  # [(timestamp, count), ...]
         self.total_overtakes = 0
         self.overtake_log: List[Dict] = []
+
+        # Multi-car train detection
+        self.train_detector = MultiCarTrainDetector()
+        self.current_lap_trains: List[MultiCarTrain] = []
 
     def get_overtake_probability(
         self,
@@ -201,6 +434,51 @@ class TimeIntervalOvertakeSystem:
         prob *= self._get_density_modifier(drivers_in_range)
 
         return min(1.0, max(0.0, prob))
+
+    def update_train_detection(
+        self,
+        driver_positions: List[Tuple[str, float]],
+        current_lap: int,
+    ) -> List[MultiCarTrain]:
+        """
+        Update multi-car train detection for current lap.
+
+        This should be called once per lap (e.g., at lap start or end)
+        to detect trains and cache the results.
+
+        Args:
+            driver_positions: List of (driver_name, cumulative_time) tuples,
+                              sorted by position (leader first)
+            current_lap: Current lap number
+
+        Returns:
+            List of detected MultiCarTrain objects
+        """
+        self.current_lap_trains = self.train_detector.detect_trains(
+            driver_positions, current_lap
+        )
+        return self.current_lap_trains
+
+    def is_overtake_in_multi_car_train(
+        self, attacker_name: str, defender_name: str
+    ) -> bool:
+        """
+        Check if an overtake attempt is happening within a multi-car train.
+
+        Args:
+            attacker_name: Name of attacking driver
+            defender_name: Name of defending driver
+
+        Returns:
+            True if the overtake is within a multi-car train (3+ cars)
+        """
+        return self.train_detector.is_overtake_in_train(attacker_name, defender_name)
+
+    def get_multi_car_train_for_driver(
+        self, driver_name: str
+    ) -> Optional[MultiCarTrain]:
+        """Get the multi-car train a driver is part of (if any)."""
+        return self.train_detector.get_driver_train(driver_name)
 
     def should_overtake(
         self,
@@ -282,6 +560,21 @@ class TimeIntervalOvertakeSystem:
             drivers_in_range,
         )
 
+        # Check if this overtake is within a multi-car train
+        is_in_multi_car_train = self.is_overtake_in_multi_car_train(
+            attacker_name, defender_name
+        )
+        train_info = None
+        if is_in_multi_car_train:
+            train = self.get_multi_car_train_for_driver(attacker_name)
+            if train:
+                train_info = {
+                    "train_size": train.size,
+                    "train_leader": train.leader,
+                    "train_tail": train.tail,
+                    "train_drivers": train.drivers,
+                }
+
         # Build debug info
         debug_info = {
             "base_prob": self.config.base_probability,
@@ -293,12 +586,16 @@ class TimeIntervalOvertakeSystem:
             "density_mod": self._get_density_modifier(drivers_in_range),
             "final_prob": prob,
             "sector": current_sector,
+            "is_in_multi_car_train": is_in_multi_car_train,
+            "train_info": train_info,
         }
 
         if random.random() < prob:
             reason = self._get_probability_explanation(
                 lap, total_laps, in_drs_zone, gap_ahead, section_type
             )
+            if is_in_multi_car_train:
+                reason += "_multi_car_train"
             return True, reason, debug_info
         else:
             reason = f"Probability {prob:.4f} did not trigger"
@@ -460,6 +757,11 @@ class TimeIntervalOvertakeSystem:
         self.rolling_window_overtakes = []
         self.total_overtakes = 0
         self.overtake_log = []
+
+        # Reset train detection
+        if hasattr(self, "train_detector"):
+            self.train_detector.invalidate_cache()
+        self.current_lap_trains = []
 
 
 # ============================================================================

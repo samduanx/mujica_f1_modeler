@@ -184,7 +184,7 @@ class IncidentManager:
         driver_name = random.choice(list(drivers.keys()))
         driver = drivers[driver_name]
 
-        # Check error probability
+        # Check error probability - R value controls error rate for top drivers
         error_prob = DriverErrorProbability().get_error_probability(
             dr_value=driver.get("dr_value", 85),
             lap_number=lap,
@@ -192,6 +192,7 @@ class IncidentManager:
             race_position=driver.get("position", 10),
             under_pressure=driver.get("under_pressure", False),
             is_first_lap=(lap == 1),
+            r_value=driver.get("R_Value", driver.get("r_value", None)),
         )
 
         if random.random() < error_prob:
@@ -454,7 +455,7 @@ class IncidentManager:
 
         penalty = penalty_map.get(
             (resistance_level, min(offense_count, 3)),
-            "warning_announced"  # Default
+            "warning_announced",  # Default
         )
 
         # Time penalty in seconds
@@ -488,8 +489,7 @@ class IncidentManager:
         }
 
         narrative = narratives.get(
-            resistance_level,
-            f"{driver_name} blue flag violation at {track_section}"
+            resistance_level, f"{driver_name} blue flag violation at {track_section}"
         )
 
         return Incident(

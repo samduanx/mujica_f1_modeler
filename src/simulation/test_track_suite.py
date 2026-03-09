@@ -182,7 +182,7 @@ def create_driver_csv(
         sorted_drivers = DEFAULT_DRIVER_DATA
 
     # Create the CSV file with driver data
-    with open(csv_path, "w") as f:
+    with open(csv_path, "w", encoding="utf-8") as f:
         if grid_positions:
             f.write("Driver,Team,DR,PR,RO,GridPosition\n")
         else:
@@ -303,7 +303,7 @@ def generate_race_report(
     description = track_config.description if track_config else "Unknown track"
     characteristics = track_config.characteristics if track_config else "Unknown"
 
-    with open(report_path, "w") as f:
+    with open(report_path, "w", encoding="utf-8") as f:
         f.write(f"# Race Report: {track_name} {year}\n\n")
         f.write(f"**Generated:** {datetime.now().isoformat()}\n\n")
         f.write(f"## Track Information\n\n")

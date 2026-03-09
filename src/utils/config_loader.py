@@ -194,18 +194,62 @@ def get_qualifying_config(is_sprint_weekend: bool = False) -> Dict[str, Any]:
 
 def get_qualifying_sessions_config(
     is_sprint_weekend: bool = False,
+    num_drivers: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get the list of qualifying session configurations.
 
     Args:
         is_sprint_weekend: If True, return sprint qualifying sessions
+        num_drivers: Number of drivers in the session (affects elimination count)
+            - 22 drivers: Q1 eliminates 6, Q2 eliminates 6
+            - 20 drivers: Q1 eliminates 5, Q2 eliminates 5
 
     Returns:
-        List of session configuration dictionaries
+        List of session configuration dictionaries with dynamic elimination counts
     """
     config = get_qualifying_config(is_sprint_weekend)
-    return config.get("sessions", [])
+    sessions = config.get("sessions", [])
+
+    if num_drivers is None:
+        return sessions
+
+    # Calculate dynamic elimination counts based on number of drivers
+    # F1 rules: Eliminate until 15 remain for Q2, then 10 for Q3
+    # Q1: Eliminate (num_drivers - 15) drivers (positions 16-20 or 17-22)
+    # Q2: Eliminate 5 drivers (positions 11-15)
+    adjusted_sessions = []
+    for session in sessions:
+        session_copy = dict(session)
+        session_name = session.get("name", "")
+
+        if session_name in ["Q1", "SQ1"]:
+            # Q1 elimination based on driver count
+            # 22 drivers: eliminate 6 (positions 17-22)
+            # 20 drivers: eliminate 5 (positions 16-20)
+            elimination_count = 6 if num_drivers >= 22 else 5
+            session_copy["elimination_count"] = elimination_count
+            start_pos = num_drivers - elimination_count + 1
+            session_copy["description"] = (
+                f"Eliminate slowest {elimination_count} (P{start_pos}-{num_drivers} determined)"
+            )
+
+        elif session_name in ["Q2", "SQ2"]:
+            # Q2 elimination based on driver count
+            # 22 drivers: eliminate 6 (positions 11-16)
+            # 20 drivers: eliminate 5 (positions 11-15)
+            elimination_count = 6 if num_drivers >= 22 else 5
+            session_copy["elimination_count"] = elimination_count
+            start_pos = 16 if num_drivers >= 22 else 15
+            session_copy["description"] = (
+                f"Eliminate slowest {elimination_count} (P11-{start_pos} determined)"
+            )
+
+        # Q3/SQ3 has elimination_count = 0 (no elimination, just pole position)
+
+        adjusted_sessions.append(session_copy)
+
+    return adjusted_sessions
 
 
 def get_practice_config(session: str) -> Optional[Dict[str, Any]]:
@@ -298,6 +342,94 @@ def get_bottom_tier_drivers() -> List[str]:
     config = _load_json_config(DRIVERS_CONFIG_PATH)
     tiers = config.get("driver_skill_tiers", {})
     return tiers.get("bottom_tier", [])
+
+
+def get_team_pr(team_name: str, track_name: str = "spain") -> float:
+    """
+    Get the PR (Performance Rating) for a team on a specific track.
+
+    PR is loaded from team CSV file (e.g., data/spain_team.csv).
+
+    Args:
+        team_name: Team name (English, e.g., "Red Bull", "Williams")
+        track_name: Track name for track-specific PR values
+
+    Returns:
+        PR value (float), or default 300.0 if not found
+    """
+    import pandas as pd
+    import os
+
+    # Default PR if not found
+    default_pr = 300.0
+
+    # Map English team names to CSV format
+    team_name_map = {
+        "Red Bull": "Red Bull",
+        "Ferrari": "Ferrari",
+        "Mercedes": "Mercedes",
+        "AlphaTauri": "AlphaTauri",
+        "Aston Martin": "Aston Martin",
+        "Alpine": "Alpine",
+        "Alfa Romeo": "Alfa Romeo",
+        "McLaren": "McLaren",
+        "Haas": "Haas",
+        "Williams": "Williams",
+        "Andretti": "Andretti",
+        "马丁": "Aston Martin",
+        "小红牛": "AlphaTauri",
+        "阿罗": "Alfa Romeo",
+        "迈凯轮": "McLaren",
+    }
+
+    csv_name = f"data/{track_name.lower()}_team.csv"
+    if not os.path.exists(csv_name):
+        csv_name = "data/spain_team.csv"  # Fallback to spain
+
+    try:
+        df = pd.read_csv(csv_name, encoding="utf-8-sig")
+        # Find the row with matching team name
+        team_en = team_name_map.get(team_name, team_name)
+        team_row = df[df["Teams"] == team_en]
+        if not team_row.empty:
+            pr_value = team_row["PR"].values[0]
+            # Remove any non-numeric characters and convert to float
+            if isinstance(pr_value, str):
+                pr_value = float(pr_value.replace(",", "").strip())
+            return float(pr_value)
+    except Exception as e:
+        print(f"Warning: Could not load PR for team {team_name}: {e}")
+
+    return default_pr
+
+
+def get_all_teams_pr(track_name: str = "spain") -> dict:
+    """
+    Get PR values for all teams.
+
+    Returns:
+        Dictionary mapping team names to PR values
+    """
+    import pandas as pd
+    import os
+
+    pr_dict = {}
+    csv_name = f"data/{track_name.lower()}_team.csv"
+    if not os.path.exists(csv_name):
+        csv_name = "data/spain_team.csv"
+
+    try:
+        df = pd.read_csv(csv_name, encoding="utf-8-sig")
+        for _, row in df.iterrows():
+            team_name = row["Teams"]
+            pr_value = row["PR"]
+            if isinstance(pr_value, str):
+                pr_value = float(pr_value.replace(",", "").strip())
+            pr_dict[team_name] = float(pr_value)
+    except Exception as e:
+        print(f"Warning: Could not load team PR values: {e}")
+
+    return pr_dict
 
 
 # =============================================================================
