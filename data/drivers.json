@@ -1,0 +1,65 @@
+{
+  "_description": "F1 2022 Driver and Team Configuration + Andretti (Novel Setting)",
+  "_note": "Used for qualifying and race simulations. 2022 grid with fictional Andretti team for the story.",
+  "drivers": [
+    "Verstappen",
+    "Perez",
+    "Hamilton",
+    "Russell",
+    "Leclerc",
+    "Sainz",
+    "Norris",
+    "Ricciardo",
+    "Alonso",
+    "Ocon",
+    "Gasly",
+    "Tsunoda",
+    "Albon",
+    "Latifi",
+    "Bottas",
+    "Zhou",
+    "Magnussen",
+    "Schumacher",
+    "Vettel",
+    "Stroll",
+    "Grosjean",
+    "Schwartzman"
+  ],
+  "teams": {
+    "Verstappen": "Red Bull",
+    "Perez": "Red Bull",
+    "Hamilton": "Mercedes",
+    "Russell": "Mercedes",
+    "Leclerc": "Ferrari",
+    "Sainz": "Ferrari",
+    "Norris": "McLaren",
+    "Ricciardo": "McLaren",
+    "Alonso": "Alpine",
+    "Ocon": "Alpine",
+    "Gasly": "AlphaTauri",
+    "Tsunoda": "AlphaTauri",
+    "Albon": "Williams",
+    "Latifi": "Williams",
+    "Bottas": "Alfa Romeo",
+    "Zhou": "Alfa Romeo",
+    "Magnussen": "Haas",
+    "Schumacher": "Haas",
+    "Vettel": "Aston Martin",
+    "Stroll": "Aston Martin",
+    "Grosjean": "Andretti",
+    "Schwartzman": "Andretti"
+  },
+  "driver_skill_tiers": {
+    "top_tier": [
+      "Verstappen",
+      "Hamilton",
+      "Leclerc"
+    ],
+    "bottom_tier": [
+      "Latifi",
+      "Zhou",
+      "Bottas",
+      "Schwartzman"
+    ]
+  }
+}

@@ -47,8 +47,9 @@ python main.py --gp-name 大奖赛名称
     - [ ] 车队升级机制移植 | Porting the current team/vehicle upgrades
     - [ ] 车手技能提升机制移植 | Porting the current driver upgrades
 - [ ] 自由练习 | Free Practice sessions
-- [ ] 排位赛（含冲刺排位） | Qualifying sessions (incl. Sprint Qualifiers)
-- [ ] 冲刺赛 | Sprint sessions
+- [x] 排位赛（含冲刺排位） | Qualifying sessions (incl. Sprint Qualifiers)
+- [x] 冲刺赛 | Sprint sessions
+  - [x] 冲刺赛结果接口（与排位赛共用）| Connector to pass sprint race results (and Q results)
 - [x] 正赛 | Races
   - [x] 进站模拟 | Pit stop simulations
   - [x] 发车模拟 | Grid and start simulations
@@ -58,6 +59,7 @@ python main.py --gp-name 大奖赛名称
   - [x] 天气系统 | Weathering system
   - [x] 蓝旗（套圈）处理 | Simulation of lapping (blue flags)
   - [x] 策略工程师模式 | Strategist mode
+    - [ ] (Optional) 动态学习与骰点比例变化 | Dynamic learning and dice roll distribution changes
   - [x] 车手技能系统 | Driver skills system
 - [ ] 赛后内容 | After-race info
   - [x] 赛事记录文档（含骰点）导出方法 | Exports of race records (including dice rolls)
@@ -68,19 +70,9 @@ python main.py --gp-name 大奖赛名称
     - [ ] 提取比赛信息 | Extracting race info
   - [ ] 预算帽计算方法移植 | Porting the cost cap system
   - [ ] 套件更换与处罚计算 | Modeling of sanctioned part replacements and related penalties
+  - [ ] 数据分析图标 | Tables and Graphs for data analysing
 - Bonus
   - [ ] 改造骰点系统使其成为可联网网上桌游 | Make it a online board game
-
----
-
-## Changelog | 更新日志
-
-### v2.x Breaking Changes (2025+)
-
-- **Output filename format changed**: Race result files now use `{track}.csv` instead of `{track}_{year}.csv`
-  - Old: `race_results_spain_2024.csv`
-  - New: `race_results_spain.csv`
-  - `--year` CLI parameter removed from simulation scripts
 
 ---
 

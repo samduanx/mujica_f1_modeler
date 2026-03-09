@@ -1,0 +1,30 @@
+{
+    "_description": "Base lap times for tracks (in seconds)",
+    "_note": "Used for qualifying simulation to generate realistic lap times",
+    "unit": "seconds",
+    "tracks": {
+        "Monaco": 75.0,
+        "Spain": 80.0,
+        "Monza": 85.0,
+        "Italy": 80.0,
+        "Australia": 85.0,
+        "Bahrain": 89.0,
+        "China": 86.0,
+        "Japan": 90.0,
+        "Austria": 64.0,
+        "Sao_Paulo": 71.0,
+        "Imola": 80.0,
+        "UK": 90.0,
+        "Hungary": 79.0,
+        "Belgium": 95.0,
+        "Netherlands": 71.0,
+        "Singapore": 84.0,
+        "USA": 94.0,
+        "Mexico": 78.0,
+        "Qatar": 82.0,
+        "Abu_Dhabi": 86.0,
+        "Canada": 76.0,
+        "Saudi_Arabia": 89.0
+    },
+    "default_lap_time": 80.0
+}

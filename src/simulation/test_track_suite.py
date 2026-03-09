@@ -132,7 +132,7 @@ DEFAULT_DRIVER_DATA = [
     ("Schwartzman", "Andretti", 99.6, 294.55, 293.37),
     # McLaren
     ("Norris", "McLaren", 100.1, 294.38, 294.67),
-    ("Piastri", "McLaren", 99.875, 294.38, 294.01),
+    ("Ricciardo", "McLaren", 99.875, 294.38, 294.01),
     # Alfa Romeo
     ("Bottas", "Alfa Romeo", 100.2, 293.98, 294.57),
     ("Zhou", "Alfa Romeo", 99.65, 293.98, 292.95),
@@ -145,13 +145,20 @@ DEFAULT_DRIVER_DATA = [
 ]  # 22 drivers total - matches reference file data/spain_team.csv
 
 
-def create_driver_csv(track_name: str, output_dir: str = "outputs/tables") -> str:
+def create_driver_csv(
+    track_name: str,
+    output_dir: str = "outputs/tables",
+    grid_positions: Optional[Dict[str, int]] = None,
+) -> str:
     """
-    Create a driver CSV file for a given track if it doesn't exist.
+    Create a driver CSV file for a given track.
 
     Args:
         track_name: Name of the track (e.g., "Monaco", "Monza")
         output_dir: Directory to save the CSV file
+        grid_positions: Optional dict mapping driver names to grid positions (1-based).
+                       When provided, drivers are sorted by grid position and the
+                       GridPosition column is included in the CSV.
 
     Returns:
         Path to the CSV file
@@ -160,16 +167,29 @@ def create_driver_csv(track_name: str, output_dir: str = "outputs/tables") -> st
 
     csv_path = os.path.join(output_dir, f"{track_name}.csv")
 
-    # If file already exists, return the path
-    if os.path.exists(csv_path):
+    # If file already exists and no grid_positions specified, return the path
+    if os.path.exists(csv_path) and grid_positions is None:
         return csv_path
+
+    # Determine driver order - use grid_positions if provided, otherwise default order
+    if grid_positions:
+        # Sort drivers by their grid position
+        sorted_drivers = sorted(
+            DEFAULT_DRIVER_DATA,
+            key=lambda x: grid_positions.get(x[0], 99),
+        )
+    else:
+        sorted_drivers = DEFAULT_DRIVER_DATA
 
     # Create the CSV file with driver data
     with open(csv_path, "w") as f:
-        f.write("Driver,Team,DR,PR,RO\n")
+        if grid_positions:
+            f.write("Driver,Team,DR,PR,RO,GridPosition\n")
+        else:
+            f.write("Driver,Team,DR,PR,RO\n")
 
         # Apply track-specific adjustments to performance
-        for driver, team, dr, pr, ro in DEFAULT_DRIVER_DATA:
+        for driver, team, dr, pr, ro in sorted_drivers:
             # Adjust values based on track characteristics
             if track_name == "Monaco":
                 # Monaco favors technical drivers, slightly slower times
@@ -208,7 +228,13 @@ def create_driver_csv(track_name: str, output_dir: str = "outputs/tables") -> st
                 adjusted_pr = pr
                 adjusted_ro = ro
 
-            f.write(f"{driver},{team},{dr},{adjusted_pr:.2f},{adjusted_ro:.2f}\n")
+            if grid_positions:
+                grid_pos = grid_positions.get(driver, 99)
+                f.write(
+                    f"{driver},{team},{dr},{adjusted_pr:.2f},{adjusted_ro:.2f},{grid_pos}\n"
+                )
+            else:
+                f.write(f"{driver},{team},{dr},{adjusted_pr:.2f},{adjusted_ro:.2f}\n")
 
     print(f"Created driver CSV: {csv_path}")
     return csv_path

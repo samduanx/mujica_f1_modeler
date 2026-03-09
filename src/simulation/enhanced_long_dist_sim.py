@@ -192,11 +192,19 @@ def read_driver_data(csv_file: str) -> dict:
             for row in reader:
                 driver_name = row.get("Driver", "")
                 if driver_name:
-                    driver_data[driver_name] = {
+                    driver_info = {
                         "Team": row.get("Team", ""),
                         "R_Value": float(row.get("R_Value", 300)),
                         "DR_Value": float(row.get("DR_Value", 0)),
                     }
+                    # Read GridPosition if present (from qualifying/sprint results)
+                    grid_pos = row.get("GridPosition")
+                    if grid_pos:
+                        try:
+                            driver_info["grid_position"] = int(grid_pos)
+                        except (ValueError, TypeError):
+                            pass
+                    driver_data[driver_name] = driver_info
     except FileNotFoundError:
         print(f"Warning: Driver data file not found: {csv_file}")
     return driver_data
@@ -1151,6 +1159,14 @@ class RaceState:
         # Lapped cars tracking
         self.lapped_cars: Dict[str, int] = {}  # driver_name -> num_laps_ahead
         self.lead_lap = set()  # Drivers on the lead lap
+
+        # CHEQUERED FLAG - race finish tracking
+        self.chequered_flag_shown = False
+        self.chequered_flag_lap = None  # Lap when leader finished
+        self.leader_finished = False
+        self.driver_lap_deficit: Dict[
+            str, int
+        ] = {}  # driver_name -> laps behind leader at finish
 
         # FAULT DEGRADATION TRACKING - MODERN F1
         # Faults accumulate and degrade speed over the race
@@ -2570,6 +2586,8 @@ class EnhancedRaceSimulator:
                 "pit_events": [],
                 "incidents": [],
                 "position": self.driver_data[driver].get("grid_position", 20),
+                "laps_completed": 0,
+                "interval": 0.0,
             }
 
             # Get team strategy
@@ -2617,8 +2635,31 @@ class EnhancedRaceSimulator:
         # Main race loop
         print(f"\n=== Starting Race (Lap 1 to {self.num_laps}) ===")
 
-        for lap in range(1, self.num_laps + 1):
+        lap = 1
+        while lap <= self.num_laps or (
+            self.race_state.chequered_flag_shown
+            and any(
+                results[d]["laps_completed"] < self.num_laps
+                for d in results
+                if not self.race_state.is_dnf(d)
+            )
+        ):
             self.race_state.current_lap = lap
+
+            # If chequered flag shown, only allow lapped cars to finish their current lap
+            if self.race_state.chequered_flag_shown:
+                # Check if any non-DNF driver still needs to complete their final lap
+                active_lapped_cars = [
+                    d
+                    for d in results
+                    if not self.race_state.is_dnf(d)
+                    and results[d]["laps_completed"] < self.num_laps
+                ]
+                if not active_lapped_cars:
+                    break  # All cars have finished
+                print(
+                    f"\n  Lap {lap}: Allowing lapped cars to finish their final lap..."
+                )
 
             # Get Ferrari driver (protagonist) for strategist decisions
             ferrari_drivers = [
@@ -3051,6 +3092,7 @@ class EnhancedRaceSimulator:
                 # Track cumulative time
                 driver_result["cumulative_time"] += lap_time
                 driver_result["lap_times"].append(lap_time)
+                driver_result["laps_completed"] += 1
                 lap_times_this_lap[driver] = driver_result["cumulative_time"]
 
                 # Record pit events
@@ -3065,6 +3107,21 @@ class EnhancedRaceSimulator:
 
             # Update positions
             sorted_drivers = sorted(lap_times_this_lap.items(), key=lambda x: x[1])
+
+            # Check for chequered flag: Leader has finished final lap
+            if (
+                lap == self.num_laps
+                and not self.race_state.chequered_flag_shown
+                and sorted_drivers
+            ):
+                leader_driver = sorted_drivers[0][0]
+                leader_laps = results[leader_driver]["laps_completed"]
+                if leader_laps >= self.num_laps:
+                    # Leader has completed final lap - show chequered flag
+                    self.race_state.chequered_flag_shown = True
+                    self.race_state.chequered_flag_lap = lap
+                    self.race_state.leader_finished = True
+                    print(f"\n🏁 CHEQUERED FLAG: {leader_driver} wins the race!")
 
             # Monaco-specific: Add overtake resistance (Fix 2a)
             # At Monaco, it's very hard to overtake, so we add a small bonus
@@ -3086,6 +3143,9 @@ class EnhancedRaceSimulator:
 
             for position, (driver, _) in enumerate(sorted_drivers, 1):
                 results[driver]["position"] = position
+
+            # Increment lap counter for next iteration
+            lap += 1
 
         # Finalize results
         print(f"\n=== Race Complete ===")
@@ -3145,11 +3205,80 @@ class EnhancedRaceSimulator:
             print(f"\n=== Strategic Decisions Summary ===")
             print("  No strategic decisions recorded.")
 
-        # Sort by final position
-        final_results = sorted(results.items(), key=lambda x: x[1]["position"])
+        # Calculate final results: sort by laps_completed (desc), then cumulative_time (asc)
+        # This ensures drivers who completed more laps rank higher (correct F1 race result logic)
+        final_results = sorted(
+            results.items(),
+            key=lambda x: (-x[1]["laps_completed"], x[1]["cumulative_time"]),
+        )
 
+        # Calculate lap deficits for lapped cars and store in race_state
+        # In F1, a driver is lapped if they haven't completed as many laps as the leader
+        # when the chequered flag is shown. We simulate this by comparing cumulative times.
+        if final_results:
+            leader_driver, leader_result = final_results[0]
+            leader_laps = leader_result["laps_completed"]
+            leader_time = leader_result["cumulative_time"]
+            avg_lap_time = leader_time / leader_laps if leader_laps > 0 else 90.0
+
+            for driver, result in final_results:
+                # Calculate effective laps based on cumulative time
+                # If a driver's cumulative time is significantly behind, they've been lapped
+                time_gap = result["cumulative_time"] - leader_time
+
+                # A driver loses a lap for every full race lap time they're behind
+                # This simulates the effect of being lapped during the race
+                laps_down = (
+                    int(time_gap / avg_lap_time) if time_gap > avg_lap_time * 0.5 else 0
+                )
+
+                # Ensure laps_down doesn't exceed reasonable bounds
+                laps_down = (
+                    min(laps_down, result["laps_completed"] - 1)
+                    if result["laps_completed"] > 1
+                    else 0
+                )
+
+                if laps_down > 0:
+                    self.race_state.driver_lap_deficit[driver] = laps_down
+                    result["laps_down"] = laps_down
+                    # Adjust laps_completed to reflect actual race position
+                    result["laps_completed"] = leader_laps - laps_down
+                else:
+                    result["laps_down"] = 0
+
+        # Calculate intervals (gap to leader)
+        leader_time = None
         for position, (driver, result) in enumerate(final_results, 1):
-            print(f"  P{position}: {driver} - {result['cumulative_time']:.3f}s")
+            if position == 1:
+                # Leader has no interval (or 0.0)
+                result["interval"] = 0.0
+                leader_time = result["cumulative_time"]
+            else:
+                # Calculate gap to leader
+                result["interval"] = result["cumulative_time"] - leader_time
+
+        # Update position field to reflect final ranking
+        for position, (driver, result) in enumerate(final_results, 1):
+            results[driver]["position"] = position
+
+        # Print final results
+        print("\n=== Final Race Results ===")
+        for position, (driver, result) in enumerate(final_results, 1):
+            interval_str = ""
+            laps_down_str = ""
+
+            # Show lap deficit for lapped cars
+            laps_down = result.get("laps_down", 0)
+            if laps_down > 0:
+                laps_down_str = f" [+{laps_down} Lap{'s' if laps_down > 1 else ''}]"
+            elif position > 1:
+                # Only show time gap if not lapped
+                interval_str = f" (+{result['interval']:.3f}s)"
+
+            print(
+                f"  P{position}: {driver} - {result['cumulative_time']:.3f}s{interval_str} ({result['laps_completed']} laps){laps_down_str}"
+            )
 
         return results
 
@@ -3195,6 +3324,8 @@ def save_race_results(
             "driver": driver,
             "team": team,
             "total_time": result["cumulative_time"],
+            "interval": result.get("interval", 0.0),
+            "laps_completed": result.get("laps_completed", 0),
             "num_pits": len(result["pit_laps"]),
             "pit_laps": ",".join(map(str, result["pit_laps"]))
             if result["pit_laps"]
@@ -3289,6 +3420,10 @@ def main(argv=None):
         action="store_true",
         help="Disable incident system",
     )
+    parser.add_argument(
+        "--output-dir",
+        help="Output directory for race results (default: auto-generated in outputs/enhanced_sim/)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -3358,9 +3493,23 @@ def main(argv=None):
 
     # Assign grid positions
     all_drivers = list(driver_data.keys())
-    random.shuffle(all_drivers)
-    for i, driver in enumerate(all_drivers):
-        driver_data[driver]["grid_position"] = i + 1
+
+    # Check if GridPosition was loaded from CSV (create_driver_csv sets this)
+    has_grid_positions = any(
+        driver_data[d].get("grid_position") is not None for d in all_drivers
+    )
+
+    if has_grid_positions:
+        # Use GridPosition from CSV - already set by read_driver_data
+        # Sort drivers by their grid position
+        all_drivers = sorted(
+            all_drivers, key=lambda x: driver_data[x].get("grid_position", 99)
+        )
+    else:
+        # No grid positions provided - shuffle for random starting order
+        random.shuffle(all_drivers)
+        for i, driver in enumerate(all_drivers):
+            driver_data[driver]["grid_position"] = i + 1
 
     print("\nGrid Positions:")
     for driver in sorted(all_drivers, key=lambda x: driver_data[x]["grid_position"]):
@@ -3388,8 +3537,14 @@ def main(argv=None):
     results = simulator.run_simulation()
 
     # Create output directory for this race run
-    runtime_datetime = datetime.now()
-    race_output_dir = get_race_output_dir(gp_name, runtime_datetime)
+    if args.output_dir:
+        # Use provided output directory
+        race_output_dir = args.output_dir
+        os.makedirs(race_output_dir, exist_ok=True)
+    else:
+        # Use default auto-generated directory
+        runtime_datetime = datetime.now()
+        race_output_dir = get_race_output_dir(gp_name, runtime_datetime)
 
     print(f"\nRace output directory: {race_output_dir}")
 

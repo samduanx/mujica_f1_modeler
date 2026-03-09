@@ -36,6 +36,9 @@ if _project_root not in sys.path:
 import pandas as pd
 import numpy as np
 
+# Import config loader for driver data
+from src.utils.config_loader import get_drivers, get_teams
+
 # Import from existing simulation modules
 from simulation.enhanced_long_dist_sim import (
     EnhancedRaceSimulator,
@@ -118,6 +121,7 @@ class SprintRaceSimulator:
         track_name: str,
         driver_data: Dict[str, Dict],
         random_seed: Optional[int] = None,
+        output_dir: Optional[str] = None,
     ):
         """
         Initialize sprint race simulator.
@@ -126,8 +130,10 @@ class SprintRaceSimulator:
             track_name: Name of the track (Imola, Austria, Sao_Paulo)
             driver_data: Dictionary of driver data
             random_seed: Optional random seed for reproducibility
+            output_dir: Optional output directory for saving results
         """
         self.track_name = track_name
+        self.output_dir = output_dir
         self.track_config = SPRINT_TRACKS.get(track_name)
         if not self.track_config:
             raise ValueError(f"Unknown sprint track: {track_name}")
@@ -199,6 +205,8 @@ class SprintRaceSimulator:
                 "LapTimes": [],
                 "Points": 0,
                 "Incidents": [],
+                "laps_completed": 0,
+                "interval": 0.0,
             }
 
         # Set initial grid positions (random for now - would come from qualifying)
@@ -263,11 +271,12 @@ class SprintRaceSimulator:
             self.lap_times[driver].append(lap_time)
             self.cumulative_times[driver] += lap_time
             self.results[driver]["LapTimes"].append(lap_time)
+            self.results[driver]["laps_completed"] += 1
 
             # Update best lap
             if lap_time < self.results[driver]["BestLap"]:
                 self.results[driver]["BestLap"] = lap_time
-                
+
                 # Log dice roll for best lap achievement
                 self.dice_logger.log_roll(
                     lap=lap,
@@ -279,18 +288,20 @@ class SprintRaceSimulator:
                     race_time=self.cumulative_times[driver],
                     details={"lap_time": round(lap_time, 3)},
                 )
-            
+
             # Random dice roll for minor incidents (1% chance per lap)
             incident_roll = roll_d100()
             if incident_roll <= 1:
                 incident_type = "minor_contact" if incident_roll == 1 else "off_track"
                 time_loss = random.uniform(0.5, 2.0)
                 self.cumulative_times[driver] += time_loss
-                self.results[driver]["Incidents"].append({
-                    "lap": lap,
-                    "type": incident_type,
-                    "time_loss": time_loss,
-                })
+                self.results[driver]["Incidents"].append(
+                    {
+                        "lap": lap,
+                        "type": incident_type,
+                        "time_loss": time_loss,
+                    }
+                )
                 self.dice_logger.log_roll(
                     lap=lap,
                     driver=driver,
@@ -306,24 +317,53 @@ class SprintRaceSimulator:
         self._update_positions()
 
     def _update_positions(self) -> None:
-        """Update race positions based on cumulative times."""
-        sorted_drivers = sorted(self.cumulative_times.items(), key=lambda x: x[1])
+        """Update race positions based on laps completed (desc) then cumulative times (asc)."""
+        sorted_drivers = sorted(
+            self.cumulative_times.items(),
+            key=lambda x: (-self.results[x[0]]["laps_completed"], x[1]),
+        )
         for position, (driver, _) in enumerate(sorted_drivers, 1):
             self.results[driver]["Position"] = position
 
     def _calculate_final_results(self) -> None:
-        """Calculate final race results."""
+        """Calculate final race results with intervals."""
         for driver in self.driver_data.keys():
             self.results[driver]["TotalTime"] = self.cumulative_times[driver]
 
+        # Sort by laps_completed (desc), then cumulative_time (asc)
+        sorted_results = sorted(
+            self.results.items(),
+            key=lambda x: (-x[1]["laps_completed"], x[1]["TotalTime"]),
+        )
+
+        # Calculate intervals (gap to leader)
+        leader_time = None
+        for position, (driver, result) in enumerate(sorted_results, 1):
+            if position == 1:
+                # Leader has no interval (or 0.0)
+                result["interval"] = 0.0
+                leader_time = result["TotalTime"]
+            else:
+                # Calculate gap to leader
+                result["interval"] = result["TotalTime"] - leader_time
+
+            # Update position
+            result["Position"] = position
+
     def _get_final_positions(self) -> Dict[int, str]:
         """Get final positions as position -> driver mapping."""
-        sorted_results = sorted(self.results.items(), key=lambda x: x[1]["TotalTime"])
+        sorted_results = sorted(
+            self.results.items(),
+            key=lambda x: (-x[1]["laps_completed"], x[1]["TotalTime"]),
+        )
         return {pos: driver for pos, (driver, _) in enumerate(sorted_results, 1)}
 
     def _award_sprint_points(self) -> None:
         """Award sprint race points to top 8 finishers."""
-        sorted_results = sorted(self.results.items(), key=lambda x: x[1]["TotalTime"])
+        sorted_results = sorted(
+            self.results.items(),
+            key=lambda x: (-x[1]["laps_completed"], x[1]["TotalTime"]),
+        )
 
         for i, (driver, _) in enumerate(sorted_results[:8], 0):
             if i < len(SPRINT_POINTS):
@@ -331,10 +371,17 @@ class SprintRaceSimulator:
 
     def _save_results(self) -> str:
         """Save race results to CSV and generate report."""
-        # Create output directory
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        output_dir = os.path.join(SPRINT_OUTPUT_DIR, f"{self.track_name}_{timestamp}")
-        os.makedirs(output_dir, exist_ok=True)
+        # Use provided output_dir or create new one
+        if self.output_dir:
+            output_dir = self.output_dir
+            os.makedirs(output_dir, exist_ok=True)
+        else:
+            # Create output directory
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            output_dir = os.path.join(
+                SPRINT_OUTPUT_DIR, f"{self.track_name}_{timestamp}"
+            )
+            os.makedirs(output_dir, exist_ok=True)
 
         # Save results to CSV
         results_df = pd.DataFrame(
@@ -349,6 +396,8 @@ class SprintRaceSimulator:
                     if data["BestLap"] != float("inf")
                     else "N/A",
                     "Points": data["Points"],
+                    "LapsCompleted": data["laps_completed"],
+                    "Interval": f"+{data['interval']:.3f}" if data["interval"] > 0 else "0.000",
                 }
                 for driver, data in sorted(
                     self.results.items(), key=lambda x: x[1]["Position"]
@@ -381,8 +430,8 @@ class SprintRaceSimulator:
             "",
             "## Final Results",
             "",
-            "| Position | Driver | Team | Grid | Total Time | Best Lap | Points |",
-            "|----------|--------|------|------|------------|----------|--------|",
+            "| Position | Driver | Team | Grid | Total Time | Interval | Laps | Best Lap | Points |",
+            "|----------|--------|------|------|------------|----------|------|----------|--------|",
         ]
 
         for driver, data in sorted(
@@ -391,9 +440,11 @@ class SprintRaceSimulator:
             best_lap = (
                 f"{data['BestLap']:.3f}" if data["BestLap"] != float("inf") else "N/A"
             )
+            interval_str = f"+{data['interval']:.3f}s" if data["interval"] > 0 else "0.000s"
             lines.append(
                 f"| {data['Position']} | {data['Driver']} | {data['Team']} | "
-                f"{data['GridPosition']} | {data['TotalTime']:.3f}s | {best_lap}s | {data['Points']} |"
+                f"{data['GridPosition']} | {data['TotalTime']:.3f}s | {interval_str} | "
+                f"{data['laps_completed']} | {best_lap}s | {data['Points']} |"
             )
 
         lines.extend(
@@ -442,6 +493,7 @@ def run_sprint_race(
     track_name: str,
     driver_data: Optional[Dict[str, Dict]] = None,
     seed: Optional[int] = None,
+    output_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Run a sprint race simulation.
@@ -450,52 +502,61 @@ def run_sprint_race(
         track_name: Name of the track (Imola, Austria, Sao_Paulo)
         driver_data: Optional driver data dictionary. If None, uses default Spain GP data.
         seed: Optional random seed for reproducibility
+        output_dir: Optional output directory. If provided, saves results there.
 
     Returns:
         Dictionary containing race results
     """
     # Load default driver data if not provided
     if driver_data is None:
-        # Use default driver data based on Spain GP ratings
-        # These match the specifications from the requirements
-        driver_data = {
-            # Red Bull
-            "Verstappen": {"Team": "Red Bull", "R_Value": 320.0, "DR_Value": 50.0},
-            "Perez": {"Team": "Red Bull", "R_Value": 310.0, "DR_Value": 40.0},
-            # Ferrari
-            "Leclerc": {"Team": "Ferrari", "R_Value": 318.0, "DR_Value": 48.0},
-            "Sainz": {"Team": "Ferrari", "R_Value": 315.0, "DR_Value": 45.0},
-            # Mercedes
-            "Hamilton": {"Team": "Mercedes", "R_Value": 316.0, "DR_Value": 46.0},
-            "Russell": {"Team": "Mercedes", "R_Value": 312.0, "DR_Value": 42.0},
-            # McLaren
-            "Norris": {"Team": "McLaren", "R_Value": 308.0, "DR_Value": 38.0},
-            "Piastri": {"Team": "McLaren", "R_Value": 305.0, "DR_Value": 35.0},
-            # Aston Martin
-            "Alonso": {"Team": "Aston Martin", "R_Value": 314.0, "DR_Value": 44.0},
-            "Stroll": {"Team": "Aston Martin", "R_Value": 298.0, "DR_Value": 28.0},
-            # Alpine
-            "Gasly": {"Team": "Alpine", "R_Value": 302.0, "DR_Value": 32.0},
-            "Ocon": {"Team": "Alpine", "R_Value": 300.0, "DR_Value": 30.0},
-            # Williams
-            "Albon": {"Team": "Williams", "R_Value": 296.0, "DR_Value": 26.0},
-            "Sargeant": {"Team": "Williams", "R_Value": 290.0, "DR_Value": 20.0},
-            # AlphaTauri
-            "Tsunoda": {"Team": "AlphaTauri", "R_Value": 294.0, "DR_Value": 24.0},
-            "Ricciardo": {"Team": "AlphaTauri", "R_Value": 304.0, "DR_Value": 34.0},
-            # Alfa Romeo
-            "Bottas": {"Team": "Alfa Romeo", "R_Value": 306.0, "DR_Value": 36.0},
-            "Zhou": {"Team": "Alfa Romeo", "R_Value": 292.0, "DR_Value": 22.0},
-            # Haas
-            "Magnussen": {"Team": "Haas", "R_Value": 295.0, "DR_Value": 25.0},
-            "Hulkenberg": {"Team": "Haas", "R_Value": 297.0, "DR_Value": 27.0},
-        }
+        # Use driver data from config loader (2022 grid + Andretti)
+        drivers = get_drivers()
+        teams = get_teams()
+
+        # Create driver data dict with R_Value and DR_Value ratings
+        # R_Value: overall race rating (base 300 + skill)
+        # DR_Value: delta rating relative to teammate
+        driver_data = {}
+        for driver in drivers:
+            team = teams.get(driver, "Unknown")
+            # Assign R_Value based on driver tier
+            # Top drivers get higher values
+            if driver in ["Verstappen", "Leclerc", "Hamilton"]:
+                r_value = 320.0
+            elif driver in ["Norris", "Russell", "Alonso"]:
+                r_value = 315.0
+            elif driver in ["Sainz", "Ricciardo", "Gasly"]:
+                r_value = 310.0
+            elif driver in ["Perez", "Ocon", "Bottas"]:
+                r_value = 305.0
+            elif driver in ["Tsunoda", "Stroll", "Vettel"]:
+                r_value = 300.0
+            elif driver in ["Albon", "Magnussen", "Schumacher"]:
+                r_value = 295.0
+            elif driver in ["Latifi", "Zhou", "Grosjean", "Schwartzman"]:
+                r_value = 290.0
+            else:
+                r_value = 300.0
+
+            # DR_Value: delta to teammate (random but consistent)
+            # Use deterministic hash (md5) of driver name for consistency
+            import hashlib
+
+            dr_hash = int(hashlib.md5(driver.encode()).hexdigest(), 16)
+            dr_value = 25.0 + (dr_hash % 20)
+
+            driver_data[driver] = {
+                "Team": team,
+                "R_Value": r_value,
+                "DR_Value": dr_value,
+            }
 
     # Create simulator and run race
     simulator = SprintRaceSimulator(
         track_name=track_name,
         driver_data=driver_data,
         random_seed=seed,
+        output_dir=output_dir,
     )
 
     return simulator.simulate_sprint()

@@ -1,0 +1,99 @@
+{
+    "_description": "Session types and configurations for race weekend simulation",
+    "session_types": [
+        "fp1",
+        "fp2",
+        "fp3",
+        "qualifying",
+        "sprint",
+        "race"
+    ],
+    "output_base_dir": "outputs/race_weekend",
+    "qualifying_config": {
+        "standard": {
+            "_description": "Standard qualifying format (Q1/Q2/Q3) - 22 driver grid",
+            "sessions": [
+                {
+                    "name": "Q1",
+                    "duration_minutes": 18,
+                    "elimination_count": 6,
+                    "description": "Eliminate slowest 6 (P17-22 determined)"
+                },
+                {
+                    "name": "Q2",
+                    "duration_minutes": 15,
+                    "elimination_count": 6,
+                    "description": "Eliminate slowest 6 (P11-16 determined)"
+                },
+                {
+                    "name": "Q3",
+                    "duration_minutes": 12,
+                    "elimination_count": 0,
+                    "description": "Top 10 battle for pole (P1-10 determined)"
+                }
+            ]
+        },
+        "sprint": {
+            "_description": "Sprint qualifying format (SQ1/SQ2/SQ3) - 22 driver grid",
+            "sessions": [
+                {
+                    "name": "SQ1",
+                    "duration_minutes": 12,
+                    "elimination_count": 6,
+                    "description": "Eliminate slowest 6 (P17-22 determined)"
+                },
+                {
+                    "name": "SQ2",
+                    "duration_minutes": 10,
+                    "elimination_count": 6,
+                    "description": "Eliminate slowest 6 (P11-16 determined)"
+                },
+                {
+                    "name": "SQ3",
+                    "duration_minutes": 8,
+                    "elimination_count": 0,
+                    "description": "Top 10 battle for pole (P1-10 determined)"
+                }
+            ]
+        }
+    },
+    "practice_config": {
+        "fp1": {
+            "duration_minutes": 60,
+            "description": "First practice session",
+            "features": [
+                "60 minutes of practice running",
+                "Driver and team data collection",
+                "Tyre testing and setup work"
+            ]
+        },
+        "fp2": {
+            "duration_minutes": 60,
+            "description": "Second practice session",
+            "features": [
+                "60 minutes of practice running",
+                "Qualifying simulation practice",
+                "Race setup refinement"
+            ]
+        },
+        "fp3": {
+            "duration_minutes": 60,
+            "description": "Third practice session",
+            "features": [
+                "60 minutes of final practice",
+                "Qualifying preparation",
+                "Last minute setup changes"
+            ]
+        }
+    },
+    "sprint_config": {
+        "distance_km": 100,
+        "description": "Sprint race format",
+        "features": [
+            "100km sprint race (~21-24 laps)",
+            "No mandatory pit stops",
+            "Points awarded to top 8 finishers (8-7-6-5-4-3-2-1)",
+            "Results determine main race starting grid"
+        ]
+    }
+}

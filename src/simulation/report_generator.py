@@ -22,7 +22,7 @@ def read_csv_file(filepath: str) -> List[Dict[str, Any]]:
         print(f"Warning: File not found: {filepath}")
         return []
 
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         return list(reader)
 
@@ -38,7 +38,7 @@ def parse_dice_rolls(csv_path: str) -> List[Dict[str, Any]]:
 
 
 def generate_race_summary(race_results: List[Dict[str, Any]]) -> str:
-    """Generate race summary section."""
+    """Generate race summary section with gap to car ahead."""
     lines = ["## Race Summary\n"]
 
     if not race_results:
@@ -46,13 +46,19 @@ def generate_race_summary(race_results: List[Dict[str, Any]]) -> str:
         return "\n".join(lines)
 
     lines.append(
-        "| Position | Driver | Team | Total Time | Pit Stops | Fault Degradation | Notes |"
+        "| Position | Driver | Team | Gap | Total Time | Pit Stops | Fault Degradation | Notes |"
     )
     lines.append(
-        "|----------|--------|------|------------|-----------|-------------------|-------|"
+        "|----------|--------|------|-----|------------|-----------|-------------------|-------|"
     )
 
-    for result in race_results:
+    # Track info for gap calculation
+    prev_laps_completed = None
+    prev_total_time = None
+    leader_laps_completed = None
+    leader_total_time = None
+
+    for i, result in enumerate(race_results):
         pos = result.get("position", "N/A")
         driver = result.get("driver", "Unknown")
         team = result.get("team", "Unknown")
@@ -71,8 +77,49 @@ def generate_race_summary(race_results: List[Dict[str, Any]]) -> str:
         except (ValueError, TypeError):
             time_str = str(total_time)
 
+        # Calculate gap to car ahead
+        gap_str = ""
+        if i == 0:
+            # Winner has no gap
+            gap_str = "-"
+            try:
+                leader_laps_completed = int(result.get("laps_completed", 0))
+                leader_total_time = float(total_time)
+            except (ValueError, TypeError):
+                leader_laps_completed = 0
+                leader_total_time = 0.0
+        else:
+            try:
+                current_laps = int(result.get("laps_completed", 0))
+                current_time = float(total_time)
+
+                # Check if this is a lapped car
+                if leader_laps_completed and current_laps < leader_laps_completed:
+                    laps_down = leader_laps_completed - current_laps
+                    gap_str = f"+{laps_down} Lap" if laps_down == 1 else f"+{laps_down} Laps"
+                elif prev_laps_completed and current_laps < prev_laps_completed:
+                    # Lapped compared to car ahead but not leader
+                    laps_down = prev_laps_completed - current_laps
+                    gap_str = f"+{laps_down} Lap" if laps_down == 1 else f"+{laps_down} Laps"
+                elif prev_total_time is not None:
+                    # Same lap - calculate time gap to car ahead
+                    gap_seconds = current_time - prev_total_time
+                    gap_str = f"+{gap_seconds:.3f}s"
+                else:
+                    gap_str = "—"
+            except (ValueError, TypeError):
+                gap_str = "—"
+
+        # Update previous car info for next iteration
+        try:
+            prev_laps_completed = int(result.get("laps_completed", 0))
+            prev_total_time = float(total_time)
+        except (ValueError, TypeError):
+            prev_laps_completed = 0
+            prev_total_time = 0.0
+
         lines.append(
-            f"| {pos} | {driver} | {team} | {time_str} | {num_pits} | {degradation} | {notes} |"
+            f"| {pos} | {driver} | {team} | {gap_str} | {time_str} | {num_pits} | {degradation} | {notes} |"
         )
 
     lines.append("")
@@ -487,7 +534,7 @@ def generate_report(
 
     # Save to file if output path provided
     if output_path:
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(full_report)
         print(f"Report saved to: {output_path}")
 
@@ -520,9 +567,7 @@ def main(argv=None):
         race_results_path = os.path.join(
             args.output_dir, f"race_results_{track_lower}.csv"
         )
-        dice_rolls_path = os.path.join(
-            args.output_dir, f"dice_rolls_{track_lower}.csv"
-        )
+        dice_rolls_path = os.path.join(args.output_dir, f"dice_rolls_{track_lower}.csv")
     else:
         print(
             "Error: Either provide both --race-results and --dice-rolls, or --output-dir"

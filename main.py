@@ -6,12 +6,20 @@ including all sessions:
 - FP1 (Free Practice 1) - placeholder, not yet implemented
 - FP2 (Free Practice 2) - placeholder, not yet implemented
 - FP3 (Free Practice 3) - placeholder, not yet implemented
-- Qualifying (Q1, Q2, Q3) - placeholder, not yet implemented
+- Qualifying (Q1, Q2, Q3) - implemented with tyre allocation and incidents
 - Sprint - 100km sprint race (Imola, Austria, Sao Paulo)
 - Race - fully implemented using enhanced_long_dist_sim
 
+Configuration:
+    All track, session, driver, and lap time data is loaded from JSON files
+    in the data/ directory:
+    - data/tracks.json: Track configurations (available_tracks, sprint_tracks)
+    - data/sessions.json: Session types and configurations
+    - data/drivers.json: Driver and team data (2024 grid)
+    - data/track_lap_times.json: Base lap times for tracks
+
 Supported Tracks:
-- Monaco, Spain, Monza, Italy, Australia, Bahrain, China, Japan
+- Monaco, Spain, Monza, Italy, Australia, Bahrain, China, Japan, Austria
 
 Sprint Race Tracks (2022):
 - Imola (Emilia Romagna GP) - 21 laps, ~100km
@@ -19,7 +27,7 @@ Sprint Race Tracks (2022):
 - Sao_Paulo (Brazil GP) - 24 laps, ~100km
 
 Usage:
-    # Run a full race weekend (runs all sessions - FP1/FP2/FP3/Qualifying are placeholders)
+    # Run a full race weekend (runs all sessions - FP1/FP2/FP3 are placeholders)
     uv run python main.py --gp-name Monaco
 
     # Run only the race
@@ -60,88 +68,86 @@ if _project_root not in sys.path:
 if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 
-
-# =============================================================================
-# AVAILABLE TRACKS AND SESSIONS
-# =============================================================================
-
-# Track configurations available for simulation
-# Note: year is not used since we're not simulating real-life races
-AVAILABLE_TRACKS = {
-    "Monaco": {
-        "gp_name": "Monaco",
-        "description": "Street circuit, low speed, high complexity",
-        "characteristics": "low_speed, high_complexity, street_circuit",
-    },
-    "Spain": {
-        "gp_name": "Spain",
-        "description": "Technical, medium speed",
-        "characteristics": "medium_speed, technical",
-    },
-    "Monza": {
-        "gp_name": "Monza",  # Use Monza for track characteristics lookup
-        "description": "High speed, low downforce",
-        "characteristics": "high_speed, low_downforce",
-    },
-    "Italy": {
-        "gp_name": "Spain",  # Use Spain as fallback for Imola-like tracks
-        "description": "High speed, low downforce (Imola)",
-        "characteristics": "high_speed, medium_downforce",
-    },
-    "Australia": {
-        "gp_name": "Australia",
-        "description": "Street circuit, medium speed",
-        "characteristics": "street_circuit, medium_speed",
-    },
-    "Bahrain": {
-        "gp_name": "Bahrain",
-        "description": "Desert circuit, medium-high speed",
-        "characteristics": "desert, medium_speed",
-    },
-    "China": {
-        "gp_name": "China",
-        "description": "Technical, medium speed",
-        "characteristics": "technical, medium_speed",
-    },
-    "Japan": {
-        "gp_name": "Japan",
-        "description": "High downforce, technical",
-        "characteristics": "high_downforce, technical",
-    },
-}
-
-# Sprint race tracks (2022 format: Imola, Austria, Sao Paulo)
-SPRINT_TRACKS = {
-    "Imola": {
-        "gp_name": "Imola",
-        "description": "Emilia Romagna GP - High downforce, technical, narrow",
-        "characteristics": "high_downforce, technical, narrow",
-        "sprint_laps": 21,
-    },
-    "Austria": {
-        "gp_name": "Austria",
-        "description": "Red Bull Ring - High speed, short lap, 3 DRS zones",
-        "characteristics": "high_speed, short_lap, overtaking",
-        "sprint_laps": 24,
-    },
-    "Sao_Paulo": {
-        "gp_name": "Brazil",
-        "description": "Interlagos - Anti-clockwise, high altitude, overtaking friendly",
-        "characteristics": "anti_clockwise, high_altitude, overtaking",
-        "sprint_laps": 24,
-    },
-}
-
-# Session types for race weekend
-SESSION_TYPES = ["fp1", "fp2", "fp3", "qualifying", "sprint", "race"]
+# Import configuration loader
+from src.utils.config_loader import (
+    get_available_tracks,
+    get_sprint_tracks,
+    get_all_tracks,
+    get_track_config,
+    is_sprint_track,
+    get_session_types,
+    get_output_base_dir,
+    get_qualifying_sessions_config,
+    get_practice_config,
+    get_sprint_config,
+    get_drivers,
+    get_teams,
+    get_driver_team,
+    get_top_tier_drivers,
+    get_bottom_tier_drivers,
+    get_track_lap_time,
+    get_default_lap_time,
+)
 
 
 # =============================================================================
-# OUTPUT DIRECTORY CONFIGURATION
+# CONFIGURATION ACCESS
 # =============================================================================
 
-# Base directory for race weekend outputs
-OUTPUT_BASE_DIR = "outputs/race_weekend"
+# These module-level constants provide backward-compatible access to
+# configuration data loaded from JSON files in the data/ directory.
+# The actual data is stored in:
+#   - data/tracks.json (available_tracks, sprint_tracks)
+#   - data/sessions.json (session_types, output_base_dir)
+#   - data/drivers.json (drivers, teams)
+#   - data/track_lap_times.json (base lap times)
+AVAILABLE_TRACKS = get_available_tracks()
+SPRINT_TRACKS = get_sprint_tracks()
+SESSION_TYPES = get_session_types()
+OUTPUT_BASE_DIR = get_output_base_dir()
+
+
+# =============================================================================
+# Andretti team participates in these Grand Prix (22 drivers total):
+# =============================================================================
+ANDRETTI_GP_ATTENDANCE = [
+    "miami",  # Miami GP
+    "spain",  # Spain GP
+    "canada",  # Canada GP
+    "hungary",  # Hungary GP
+    "italy",  # Italy (Monza)
+    "monza",  # Monza (alias for Italy)
+    "singapore",  # Singapore GP
+    "united states",  # US (Austin)
+    "united_states",  # US (Austin) - alternative key
+    "austin",  # US (Austin) - alternative key
+    "mexico",  # Mexico GP
+    "brazil",  # Brazil GP
+]
+
+
+def is_andretti_participating(gp_name: str) -> bool:
+    """Check if Andretti team participates in the given GP."""
+    gp_lower = gp_name.lower().strip()
+    return gp_lower in ANDRETTI_GP_ATTENDANCE
+
+
+def filter_andretti_drivers_for_gp(drivers: List[str], gp_name: str) -> List[str]:
+    """
+    Filter out Andretti drivers if they don't participate in this GP.
+
+    Args:
+        drivers: List of driver names
+        gp_name: Name of the Grand Prix
+
+    Returns:
+        Filtered list of drivers (Andretti drivers removed if not attending)
+    """
+    if is_andretti_participating(gp_name):
+        return drivers
+
+    teams = get_teams()
+    return [d for d in drivers if teams.get(d) != "Andretti"]
 
 
 def get_race_weekend_output_dir(
@@ -261,57 +267,70 @@ def generate_session_summary(
                 "",
             ]
         )
-        if session == "fp1":
-            summary_lines.extend(
-                [
-                    "- 60 minutes of practice running",
-                    "- Driver and team data collection",
-                    "- Tyre testing and setup work",
-                ]
-            )
-        elif session == "fp2":
-            summary_lines.extend(
-                [
-                    "- 60 minutes of practice running",
-                    "- Qualifying simulation practice",
-                    "- Race setup refinement",
-                ]
-            )
-        elif session == "fp3":
-            summary_lines.extend(
-                [
-                    "- 60 minutes of final practice",
-                    "- Qualifying preparation",
-                    "- Last minute setup changes",
-                ]
-            )
+        # Load session features from configuration
+        if session in ["fp1", "fp2", "fp3"]:
+            practice_config = get_practice_config(session)
+            if practice_config and "features" in practice_config:
+                for feature in practice_config["features"]:
+                    summary_lines.append(f"- {feature}")
         elif session == "qualifying":
-            summary_lines.extend(
-                [
-                    "- Q1: 18 minutes (eliminate slowest 5 drivers)",
-                    "- Q2: 15 minutes (eliminate slowest 5 drivers)",
-                    "- Q3: 12 minutes (top 10 battle for pole)",
-                ]
-            )
+            # Load qualifying config from sessions.json
+            qual_config = get_qualifying_sessions_config(is_sprint_weekend=False)
+            for q_session in qual_config:
+                summary_lines.append(
+                    f"- {q_session['name']}: {q_session['duration_minutes']} minutes ({q_session['description']})"
+                )
         elif session == "sprint":
-            summary_lines.extend(
-                [
-                    "- 100km sprint race (~21-24 laps)",
-                    "- No mandatory pit stops",
-                    "- Points awarded to top 8 finishers (8-7-6-5-4-3-2-1)",
-                    "- Results determine main race starting grid",
-                ]
-            )
+            sprint_config = get_sprint_config()
+            if sprint_config and "features" in sprint_config:
+                for feature in sprint_config["features"]:
+                    summary_lines.append(f"- {feature}")
     elif status == "completed":
-        summary_lines.extend(
-            [
-                "## Results",
-                "",
-                "Race simulation completed successfully.",
-                "",
-                "See output files in this directory for details.",
-            ]
-        )
+        summary_lines.extend(["## Results", ""])
+
+        # For race sessions, try to read and display results from CSV
+        if session == "race":
+            csv_path = os.path.join(
+                output_dir, f"race_results_{track_name.lower()}.csv"
+            )
+            if os.path.exists(csv_path):
+                try:
+                    import csv as csv_module
+
+                    with open(csv_path, "r", encoding="utf-8") as f:
+                        reader = csv_module.DictReader(f)
+                        rows = list(reader)
+
+                    summary_lines.append("**Race Results:**")
+                    summary_lines.append("")
+                    summary_lines.append("| Pos | Driver | Team | Total Time | Pits |")
+                    summary_lines.append("|-----|--------|------|------------|------|")
+                    for row in rows[:20]:  # Top 20
+                        try:
+                            total_time = float(row.get("total_time", 0))
+                            summary_lines.append(
+                                f"| {row.get('position', '')} | {row.get('driver', '')} | "
+                                f"{row.get('team', '')} | {total_time:.3f}s | "
+                                f"{row.get('num_pits', '')} |"
+                            )
+                        except (ValueError, TypeError):
+                            summary_lines.append(
+                                f"| {row.get('position', '')} | {row.get('driver', '')} | "
+                                f"{row.get('team', '')} | {row.get('total_time', 'N/A')} | "
+                                f"{row.get('num_pits', '')} |"
+                            )
+                    summary_lines.append("")
+                except Exception as e:
+                    summary_lines.append(
+                        f"Race completed. Results saved to CSV file: {e}"
+                    )
+                    summary_lines.append("")
+            else:
+                summary_lines.append("Race simulation completed successfully.")
+                summary_lines.append("")
+        else:
+            summary_lines.append("Simulation completed successfully.")
+            summary_lines.append("")
     elif status == "error":
         summary_lines.extend(
             [
@@ -337,7 +356,7 @@ def generate_race_weekend_report(
     output_dir: str,
 ) -> str:
     """
-    Generate a race weekend report markdown file.
+    Generate a comprehensive race weekend report markdown file.
 
     Args:
         track_name: Track name
@@ -352,25 +371,23 @@ def generate_race_weekend_report(
     gp_name = track_config.get("gp_name", track_name)
 
     lines = [
-        f"# F1 Race Weekend Report",
+        f"# F1 Race Weekend Report - {track_name}",
         "",
-        f"## Event Information",
+        f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "",
+        "## Event Information",
         "",
         f"| Field | Value |",
         f"|-------|-------|",
         f"| Track | {track_name} |",
         f"| GP Name | {gp_name} |",
         f"| Sessions Run | {', '.join(sessions)} |",
+        f"| Output Directory | {output_dir} |",
         f"",
     ]
 
-    # Session summaries
-    lines.extend(
-        [
-            "## Session Summaries",
-            "",
-        ]
-    )
+    # Session summaries with detailed results
+    lines.extend(["## Session Summaries", ""])
 
     for session in sessions:
         result = session_results.get(session, {})
@@ -383,23 +400,130 @@ def generate_race_weekend_report(
                 "",
                 f"**Status:** {status}",
                 "",
-                f"**Output Directory:** `{session}/`",
-                "",
             ]
         )
 
-        if session == "race" and status == "completed":
-            # Link to race-specific report if available
-            lines.extend(
-                [
-                    "**Race Results:**",
-                    "",
-                    f"- [Race Results CSV]({session}/race_results_{gp_name.lower()}.csv)",
-                    f"- [Dice Rolls CSV]({session}/dice_rolls_{gp_name.lower()}.csv)",
-                    f"- [Race Report]({session}/race_report_{gp_name.lower()}.md)",
-                    "",
-                ]
+        # Add session-specific details
+        if session in ["fp1", "fp2", "fp3"] and status == "completed":
+            setup_results = result.get("setup_results", {})
+            if setup_results:
+                lines.extend(["**Setup Tuning Results (R Rating Deltas):**", ""])
+                lines.extend(["| Driver | R Delta |", "|--------|---------|"])
+                # Sort by R delta (best first)
+                sorted_results = sorted(
+                    setup_results.items(), key=lambda x: x[1], reverse=True
+                )
+                for driver, delta in sorted_results[:10]:  # Top 10
+                    lines.append(f"| {driver} | {delta:+.2f} |")
+                if len(sorted_results) > 10:
+                    lines.append(f"| ... ({len(sorted_results) - 10} more) | ... |")
+                lines.append("")
+
+            # Parc Ferme info for FP3
+            if session == "fp3":
+                r_deltas = result.get("r_rating_deltas", {})
+                parc_ferme_active = result.get("parc_ferme_active", False)
+                lines.append(
+                    f"**Parc Fermé:** {'Active' if parc_ferme_active else 'Inactive'}"
+                )
+                lines.append("")
+                if r_deltas:
+                    lines.extend(
+                        ["**Final R Rating Deltas (for Qualifying/Race):**", ""]
+                    )
+                    lines.extend(["| Driver | R Delta |", "|--------|---------|"])
+                    sorted_deltas = sorted(
+                        r_deltas.items(), key=lambda x: x[1], reverse=True
+                    )
+                    for driver, delta in sorted_deltas:
+                        lines.append(f"| {driver} | {delta:+.2f} |")
+                    lines.append("")
+
+        elif session == "qualifying" and status == "completed":
+            grid_positions = result.get("grid_positions", {})
+            pole_sitter = result.get("pole_sitter")
+            is_sprint = result.get("is_sprint_weekend", False)
+
+            if is_sprint:
+                lines.append("**Format:** Sprint Qualifying (SQ1/SQ2/SQ3)")
+            else:
+                lines.append("**Format:** Standard Qualifying (Q1/Q2/Q3)")
+            lines.append("")
+
+            if pole_sitter:
+                lines.append(f"**Pole Position:** {pole_sitter}")
+                lines.append("")
+
+            if grid_positions:
+                lines.extend(["**Starting Grid:**", ""])
+                lines.extend(["| Position | Driver |", "|----------|--------|"])
+                sorted_grid = sorted(grid_positions.items(), key=lambda x: x[1])
+                for driver, pos in sorted_grid:
+                    lines.append(f"| {pos} | {driver} |")
+                lines.append("")
+
+            csv_path = result.get("csv_path")
+            if csv_path:
+                lines.append(
+                    f"**Results CSV:** [{os.path.basename(csv_path)}]({csv_path})"
+                )
+                lines.append("")
+
+        elif session == "sprint" and status == "completed":
+            final_positions = result.get("final_positions", {})
+            if final_positions:
+                lines.extend(["**Sprint Race Results:**", ""])
+                lines.extend(["| Position | Driver |", "|----------|--------|"])
+                sorted_positions = sorted(final_positions.items(), key=lambda x: x[0])
+                for pos, driver in sorted_positions:
+                    lines.append(f"| {pos} | {driver} |")
+                lines.append("")
+            lines.append(
+                "**Note:** Sprint results determine the main race starting grid."
             )
+            lines.append("")
+
+        elif session == "race" and status == "completed":
+            # Try to read detailed race results from session summary
+            race_summary_path = os.path.join(session_dir, "session_summary_race.md")
+            if os.path.exists(race_summary_path):
+                try:
+                    with open(race_summary_path, "r", encoding="utf-8") as f:
+                        summary_content = f.read()
+                    # Extract the results table from the summary
+                    in_results_section = False
+                    for line in summary_content.split("\n"):
+                        if "## Results" in line:
+                            in_results_section = True
+                            continue
+                        if in_results_section:
+                            if (
+                                line.strip().startswith("**")
+                                and "Race Results:" not in line
+                            ):
+                                break
+                            if line.strip():
+                                lines.append(line)
+                    lines.append("")
+                except Exception as e:
+                    # Fallback to CSV links if reading fails
+                    lines.extend(["**Race Results:**", ""])
+                    lines.extend(
+                        [
+                            f"- [Race Results CSV](race/race_results_{gp_name.lower()}.csv)",
+                            f"- [Dice Rolls CSV](race/dice_rolls_{gp_name.lower()}.csv)",
+                        ]
+                    )
+                    lines.append("")
+            else:
+                lines.extend(["**Race Results:**", ""])
+                lines.extend(
+                    [
+                        f"- [Race Results CSV](race/race_results_{gp_name.lower()}.csv)",
+                        f"- [Dice Rolls CSV](race/dice_rolls_{gp_name.lower()}.csv)",
+                    ]
+                )
+                lines.append("")
 
         lines.append("")
 
@@ -418,19 +542,39 @@ def generate_race_weekend_report(
         status = result.get("status", "unknown")
         lines.append(f"| {session.upper()} | {status} |")
 
+    # Weekend flow diagram
+    lines.extend(
+        [
+            "",
+            "## Weekend Flow",
+            "",
+        ]
+    )
+
+    if "fp1" in sessions and "fp2" in sessions and "fp3" in sessions:
+        lines.append("```")
+        if "sprint" in sessions:
+            lines.append("FP1 → [PARC FERMÉ] → Qualifying → Sprint → Race")
+        else:
+            lines.append("FP1 → FP2 → FP3 → [PARC FERMÉ] → Qualifying → Race")
+        lines.append("```")
+    else:
+        lines.append(f"Sessions run: {' → '.join(sessions)}")
+
     lines.extend(
         [
             "",
             "---",
             "",
             f"*Report generated by F1 Race Weekend Simulator*",
+            f"*Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*",
         ]
     )
 
     report_content = "\n".join(lines)
     report_path = os.path.join(output_dir, "race_weekend_report.md")
 
-    with open(report_path, "w") as f:
+    with open(report_path, "w", encoding="utf-8") as f:
         f.write(report_content)
 
     return report_path
@@ -441,116 +585,746 @@ def generate_race_weekend_report(
 # =============================================================================
 
 
-def simulate_fp1(track_name: str, output_dir: Optional[str] = None, **kwargs) -> dict:
+# Global practice session storage (persisted across FP1/FP2/FP3)
+_practice_sessions: Dict[str, Any] = {}
+
+
+def _get_driver_ratings(track_name: str) -> Dict[str, float]:
+    """Get base driver ratings with track-specific adjustments."""
+    drivers = get_drivers()
+    base_ratings = {
+        "Verstappen": 100.0,
+        "Perez": 99.6,
+        "Leclerc": 99.8,
+        "Sainz": 99.5,
+        "Hamilton": 99.7,
+        "Russell": 99.4,
+        "Norris": 100.1,
+        "Ricciardo": 99.875,
+        "Alonso": 99.2,
+        "Ocon": 99.3,
+        "Gasly": 99.35,
+        "Tsunoda": 99.45,
+        "Vettel": 99.1,
+        "Stroll": 99.25,
+        "Albon": 99.15,
+        "Latifi": 98.9,
+        "Bottas": 100.2,
+        "Zhou": 99.65,
+        "Schumacher": 98.95,
+        "Magnussen": 99.05,
+        "Hulkenberg": 98.85,
+        "Grosjean": 98.75,
+        "Schwartzman": 99.6,
+    }
+
+    driver_ratings = {}
+    for driver in drivers:
+        base = base_ratings.get(driver, 99.5)
+        if track_name == "Monaco":
+            if driver in ["Leclerc", "Alonso", "Hamilton"]:
+                base -= 0.1
+        elif track_name in ["Monza", "Italy"]:
+            if driver in ["Verstappen", "Hamilton"]:
+                base -= 0.1
+        driver_ratings[driver] = base
+
+    return driver_ratings
+
+
+def simulate_fp1(
+    track_name: str,
+    output_dir: Optional[str] = None,
+    seed: Optional[int] = None,
+    **kwargs,
+) -> dict:
     """
     Simulate Free Practice 1 session.
-
-    Placeholder for FP1 module - not yet implemented.
     """
     print(f"\n{'=' * 60}")
     print(f"FP1 - Free Practice 1 Session")
     print(f"Track: {track_name}")
     print(f"{'=' * 60}")
-    print("Note: FP1 simulation not yet implemented.")
-    print("This session would include:")
-    print("  - 60 minutes of practice running")
-    print("  - Driver and team data collection")
-    print("  - Tyre testing and setup work")
 
-    # Generate session summary if output directory provided
-    if output_dir:
-        generate_session_summary("fp1", track_name, "not_implemented", output_dir)
+    try:
+        import csv
+        from src.practice import PracticeSessionManager, PracticeSessionType
 
-    return {
-        "session": "fp1",
-        "status": "not_implemented",
-        "track": track_name,
-    }
+        # Get driver ratings
+        driver_ratings = _get_driver_ratings(track_name)
+        base_lap_time = get_track_lap_time(track_name, 80.0)
+
+        # Filter Andretti drivers if not participating
+        all_drivers = get_drivers()
+        filtered_drivers = filter_andretti_drivers_for_gp(all_drivers, track_name)
+
+        # Create and run FP1 session
+        fp1_manager = PracticeSessionManager(
+            session_type=PracticeSessionType.FP1,
+            track=track_name,
+            track_base_time=base_lap_time,
+            drivers=filtered_drivers,
+            driver_ratings=driver_ratings,
+            duration_minutes=60,
+            seed=seed,
+        )
+        fp1_results = fp1_manager.run_session()
+
+        # Store results for later sessions
+        global _practice_sessions
+        _practice_sessions["fp1"] = fp1_results
+
+        print(f"\nFP1 Complete - Setup tuning results recorded")
+        print(f"  {len(fp1_results.setup_results)} drivers completed setup tuning")
+
+        if output_dir:
+            generate_session_summary("fp1", track_name, "completed", output_dir)
+
+            # Generate full report and CSVs
+            os.makedirs(output_dir, exist_ok=True)
+            teams = get_teams()
+
+            # 1. Generate results CSV
+            results_csv_path = os.path.join(
+                output_dir, f"fp1_results_{track_name.lower()}.csv"
+            )
+            with open(results_csv_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(
+                    ["Driver", "Team", "Best Lap (s)", "Laps Completed", "R Delta"]
+                )
+                for driver in fp1_results.best_times.keys():
+                    best_time = fp1_results.best_times.get(driver, 0)
+                    laps = len(fp1_results.lap_times.get(driver, []))
+                    r_delta = fp1_results.setup_results.get(driver, None)
+                    r_delta_val = r_delta.r_rating_delta if r_delta else 0.0
+                    writer.writerow(
+                        [
+                            driver,
+                            teams.get(driver, "Unknown"),
+                            f"{best_time:.3f}" if best_time < float("inf") else "",
+                            laps,
+                            f"{r_delta_val:+.2f}" if r_delta else "",
+                        ]
+                    )
+            print(f"FP1 results saved to: {results_csv_path}")
+
+            # 2. Generate dice rolls CSV
+            dice_csv_path = os.path.join(
+                output_dir, f"dice_rolls_{track_name.lower()}.csv"
+            )
+            with open(dice_csv_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Driver", "Category", "Roll Value", "R Delta"])
+                for driver, setup in fp1_results.setup_results.items():
+                    writer.writerow(
+                        [
+                            driver,
+                            "aerodynamics",
+                            setup.aerodynamics,
+                            f"{setup.r_rating_delta:+.2f}",
+                        ]
+                    )
+                    writer.writerow([driver, "suspension", setup.suspension, ""])
+                    writer.writerow([driver, "differential", setup.differential, ""])
+                    writer.writerow([driver, "brake_balance", setup.brake_balance, ""])
+                    writer.writerow([driver, "tyre_pressure", setup.tyre_pressure, ""])
+            print(f"FP1 dice rolls saved to: {dice_csv_path}")
+
+            # 3. Generate full markdown report
+            report_path = os.path.join(
+                output_dir, f"fp1_report_{track_name.lower()}.md"
+            )
+            with open(report_path, "w") as f:
+                f.write(f"# FP1 Report - {track_name}\n\n")
+                f.write(f"**Session:** Free Practice 1\n\n")
+                f.write(f"**Track:** {track_name}\n\n")
+
+                # Results table
+                f.write("## Session Results\n\n")
+                f.write("| Pos | Driver | Team | Best Lap | Laps | R Delta |\n")
+                f.write("|-----|--------|------|----------|------|---------|\n")
+
+                # Sort by best lap time
+                standings = sorted(
+                    fp1_results.best_times.items(),
+                    key=lambda x: x[1] if x[1] < float("inf") else 9999,
+                )
+                for pos, (driver, best_time) in enumerate(standings, 1):
+                    laps = len(fp1_results.lap_times.get(driver, []))
+                    r_delta = fp1_results.setup_results.get(driver, None)
+                    r_delta_str = f"{r_delta.r_rating_delta:+.2f}" if r_delta else ""
+                    best_str = f"{best_time:.3f}" if best_time < float("inf") else ""
+                    team = teams.get(driver, "Unknown")
+                    f.write(
+                        f"| {pos} | {driver} | {team} | {best_str} | {laps} | {r_delta_str} |\n"
+                    )
+
+                # Setup tuning results
+                f.write("\n## Setup Tuning Results\n\n")
+                f.write(
+                    "| Driver | Aero | Susp | Diff | Brake | Tyre | Total | R Delta |\n"
+                )
+                f.write(
+                    "|--------|------|------|------|-------|------|-------|---------|\n"
+                )
+                for driver, setup in fp1_results.setup_results.items():
+                    f.write(
+                        f"| {driver} | {setup.aerodynamics} | {setup.suspension} | "
+                        f"{setup.differential} | {setup.brake_balance} | {setup.tyre_pressure} | "
+                        f"{setup.total_effect:+.1f} | {setup.r_rating_delta:+.2f} |\n"
+                    )
+
+                f.write("\n## Session Statistics\n\n")
+                f.write(f"- Total Laps: {fp1_results.total_laps}\n")
+                f.write(f"- Incidents: {len(fp1_results.incidents)}\n")
+
+            print(f"FP1 report saved to: {report_path}")
+
+        return {
+            "session": "fp1",
+            "status": "completed",
+            "track": track_name,
+            "setup_results": {
+                d: r.r_rating_delta for d, r in fp1_results.setup_results.items()
+            },
+        }
+
+    except Exception as e:
+        print(f"Error during FP1 simulation: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+        if output_dir:
+            generate_session_summary("fp1", track_name, "error", output_dir)
+
+        return {
+            "session": "fp1",
+            "status": "error",
+            "track": track_name,
+            "error": str(e),
+        }
 
 
-def simulate_fp2(track_name: str, output_dir: Optional[str] = None, **kwargs) -> dict:
+def simulate_fp2(
+    track_name: str,
+    output_dir: Optional[str] = None,
+    seed: Optional[int] = None,
+    **kwargs,
+) -> dict:
     """
     Simulate Free Practice 2 session.
-
-    Placeholder for FP2 module - not yet implemented.
     """
     print(f"\n{'=' * 60}")
     print(f"FP2 - Free Practice 2 Session")
     print(f"Track: {track_name}")
     print(f"{'=' * 60}")
-    print("Note: FP2 simulation not yet implemented.")
-    print("This session would include:")
-    print("  - 60 minutes of practice running")
-    print("  - Qualifying simulation practice")
-    print("  - Race setup refinement")
 
-    # Generate session summary if output directory provided
-    if output_dir:
-        generate_session_summary("fp2", track_name, "not_implemented", output_dir)
+    try:
+        import csv
+        from src.practice import PracticeSessionManager, PracticeSessionType
 
-    return {
-        "session": "fp2",
-        "status": "not_implemented",
-        "track": track_name,
-    }
+        # Get driver ratings
+        driver_ratings = _get_driver_ratings(track_name)
+        base_lap_time = get_track_lap_time(track_name, 80.0)
+
+        # Filter Andretti drivers if not participating
+        all_drivers = get_drivers()
+        filtered_drivers = filter_andretti_drivers_for_gp(all_drivers, track_name)
+
+        # Create and run FP2 session
+        fp2_manager = PracticeSessionManager(
+            session_type=PracticeSessionType.FP2,
+            track=track_name,
+            track_base_time=base_lap_time,
+            drivers=filtered_drivers,
+            driver_ratings=driver_ratings,
+            duration_minutes=60,
+            seed=seed + 1 if seed else None,
+        )
+        fp2_results = fp2_manager.run_session()
+
+        # Store results
+        global _practice_sessions
+        _practice_sessions["fp2"] = fp2_results
+
+        print(f"\nFP2 Complete - Setup tuning results recorded")
+        print(f"  {len(fp2_results.setup_results)} drivers completed setup tuning")
+
+        if output_dir:
+            generate_session_summary("fp2", track_name, "completed", output_dir)
+
+        return {
+            "session": "fp2",
+            "status": "completed",
+            "track": track_name,
+            "setup_results": {
+                d: r.r_rating_delta for d, r in fp2_results.setup_results.items()
+            },
+        }
+
+    except Exception as e:
+        print(f"Error during FP2 simulation: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+        if output_dir:
+            generate_session_summary("fp2", track_name, "error", output_dir)
+
+        return {
+            "session": "fp2",
+            "status": "error",
+            "track": track_name,
+            "error": str(e),
+        }
 
 
-def simulate_fp3(track_name: str, output_dir: Optional[str] = None, **kwargs) -> dict:
+def simulate_fp3(
+    track_name: str,
+    output_dir: Optional[str] = None,
+    seed: Optional[int] = None,
+    **kwargs,
+) -> dict:
     """
     Simulate Free Practice 3 session.
-
-    Placeholder for FP3 module - not yet implemented.
+    After FP3, parc fermé is established.
     """
     print(f"\n{'=' * 60}")
     print(f"FP3 - Free Practice 3 Session")
     print(f"Track: {track_name}")
     print(f"{'=' * 60}")
-    print("Note: FP3 simulation not yet implemented.")
-    print("This session would include:")
-    print("  - 60 minutes of final practice")
-    print("  - Qualifying preparation")
-    print("  - Last minute setup changes")
 
-    # Generate session summary if output directory provided
-    if output_dir:
-        generate_session_summary("fp3", track_name, "not_implemented", output_dir)
+    try:
+        from src.practice import PracticeSessionManager, PracticeSessionType
+        from src.practice import ParcFermeCoordinator
 
-    return {
-        "session": "fp3",
-        "status": "not_implemented",
-        "track": track_name,
-    }
+        # Get driver ratings
+        driver_ratings = _get_driver_ratings(track_name)
+        base_lap_time = get_track_lap_time(track_name, 80.0)
+
+        # Filter Andretti drivers if not participating
+        all_drivers = get_drivers()
+        filtered_drivers = filter_andretti_drivers_for_gp(all_drivers, track_name)
+
+        # Create and run FP3 session
+        fp3_manager = PracticeSessionManager(
+            session_type=PracticeSessionType.FP3,
+            track=track_name,
+            track_base_time=base_lap_time,
+            drivers=filtered_drivers,
+            driver_ratings=driver_ratings,
+            duration_minutes=60,
+            seed=seed + 2 if seed else None,
+        )
+        fp3_results = fp3_manager.run_session()
+
+        # Store results
+        global _practice_sessions
+        _practice_sessions["fp3"] = fp3_results
+
+        # Setup parc fermé after FP3
+        coordinator = ParcFermeCoordinator()
+        parc_ferme = coordinator.setup_normal_weekend(
+            fp1_setups=_practice_sessions.get("fp1", {}).setup_results,
+            fp2_setups=_practice_sessions.get("fp2", {}).setup_results,
+            fp3_setups=fp3_results.setup_results,
+        )
+
+        # Get final R rating deltas
+        r_deltas = parc_ferme.get_r_rating_deltas()
+
+        print(f"\nFP3 Complete - Parc Fermé established")
+        print(f"  {len(fp3_results.setup_results)} drivers completed setup tuning")
+        print(f"  Final R rating deltas computed for {len(r_deltas)} drivers")
+
+        if output_dir:
+            generate_session_summary("fp3", track_name, "completed", output_dir)
+
+        return {
+            "session": "fp3",
+            "status": "completed",
+            "track": track_name,
+            "r_rating_deltas": r_deltas,
+            "parc_ferme_active": parc_ferme.is_active(),
+        }
+
+    except Exception as e:
+        print(f"Error during FP3 simulation: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+        if output_dir:
+            generate_session_summary("fp3", track_name, "error", output_dir)
+
+        return {
+            "session": "fp3",
+            "status": "error",
+            "track": track_name,
+            "error": str(e),
+        }
 
 
 def simulate_qualifying(
-    track_name: str, output_dir: Optional[str] = None, **kwargs
+    track_name: str,
+    output_dir: Optional[str] = None,
+    is_sprint_weekend: bool = False,
+    **kwargs,
 ) -> dict:
     """
-    Simulate Qualifying session (Q1, Q2, Q3).
+    Simulate Qualifying session (Q1, Q2, Q3 or SQ1, SQ2, SQ3 for sprint).
 
-    Placeholder for Qualifying module - not yet implemented.
+    Args:
+        track_name: Name of the track
+        output_dir: Output directory for race weekend
+        is_sprint_weekend: If True, use sprint qualifying format (SQ1/SQ2/SQ3)
     """
     print(f"\n{'=' * 60}")
-    print(f"Qualifying Session - Q1, Q2, Q3")
-    print(f"Track: {track_name}")
+    print(f"Qualifying Session - {track_name}")
     print(f"{'=' * 60}")
-    print("Note: Qualifying simulation not yet implemented.")
-    print("This session would include:")
-    print("  - Q1: 18 minutes (eliminate slowest 5 drivers)")
-    print("  - Q2: 15 minutes (eliminate slowest 5 drivers)")
-    print("  - Q3: 12 minutes (top 10 battle for pole)")
 
-    # Generate session summary if output directory provided
-    if output_dir:
-        generate_session_summary(
-            "qualifying", track_name, "not_implemented", output_dir
+    # Import qualifying module
+    try:
+        import csv
+        import random
+
+        # Load driver data from config
+        all_drivers = get_drivers()
+        teams = get_teams()
+
+        # Filter Andretti drivers if not participating
+        drivers = filter_andretti_drivers_for_gp(all_drivers, track_name)
+
+        base_lap_time = get_track_lap_time(track_name, 80.0)
+
+        # Import qualifying components
+        from src.qualifying import (
+            QualifyingSessionManager,
+            QualifyingLap,
+            QualifyingResult,
         )
+        from src.qualifying.incident_handler import QualifyingIncidentHandler
+        from src.qualifying.tyre_allocation import TyreAllocationManager
 
-    return {
-        "session": "qualifying",
-        "status": "not_implemented",
-        "track": track_name,
-    }
+        # Create incident handler
+        incident_handler = QualifyingIncidentHandler()
+
+        # Get qualifying configuration
+        qual_config = get_qualifying_sessions_config(is_sprint_weekend)
+        sessions_config = [
+            (s["name"], s["duration_minutes"], s["elimination_count"])
+            for s in qual_config
+        ]
+
+        active_drivers = drivers.copy()
+
+        # Results storage
+        driver_results = {
+            d: QualifyingResult(d, teams.get(d, "Unknown")) for d in drivers
+        }
+
+        # Dice rolls tracking
+        dice_rolls = []
+
+        # ========================================================================
+        # CHEQUERED FLAG LIMITATION NOTE (F1 2022 Sporting Regulations)
+        # ========================================================================
+        # Current system simulates qualifying sessions with a simplified time-based
+        # model where all drivers set laps simultaneously (or in quick succession).
+        #
+        # This does NOT fully simulate the F1 2022 Sporting Regulations:
+        # - Article 33.3: If a driver is on a flying lap when the chequered flag falls,
+        #   that lap is valid if completed before the flag reaches the start/finish line
+        # - Article 33.4: When session time expires, the session ends when the LEADER
+        #   completes their lap; drivers who haven't started a flying lap cannot start one
+        #
+        # Real-world implications not simulated:
+        # 1. Different driver positions on track when session ends
+        # 2. Whether a driver is "on a flying lap" vs "in the pit" when time expires
+        # 3. The leader completing their lap to "trigger" session end
+        # 4. Drivers being unable to start new laps after time expires
+        #
+        # To implement fully, would need to simulate:
+        # - Track position of each driver at each moment
+        # - Lap start times and expected lap completion times
+        # - Session end triggered by leader crossing the line
+        # ========================================================================
+
+        # Run each session
+        for session_name, duration, elimination_count in sessions_config:
+            print(f"\n{'-' * 60}")
+            print(f"{session_name} - {duration} minutes")
+            print(f"{'-' * 60}")
+
+            session = QualifyingSessionManager(
+                session_name, duration, active_drivers, elimination_count
+            )
+            session.start_session()
+
+            # Get driver skill tiers from configuration
+            top_tier_drivers = get_top_tier_drivers()
+            bottom_tier_drivers = get_bottom_tier_drivers()
+
+            # Simulate each driver setting lap times
+            for driver in active_drivers:
+                # Generate realistic lap time with variation
+                # NOTE: Reduced random variation to make driver skill more significant.
+                # Previous: skill_factor (-0.5 to 0.5) + additional (-0.2 to 0.2) = ~1.4s total random
+                # Now: skill_factor (-0.3 to 0.3) + additional (-0.1 to 0.1) = ~0.8s total random
+                # Skill gap between tiers remains 0.6s, so skill is now more influential.
+                base = base_lap_time
+                # Add driver skill variation (top drivers faster)
+                skill_factor = random.uniform(-0.3, 0.3)  # Reduced from -0.5 to 0.5
+                if driver in top_tier_drivers:
+                    skill_factor -= 0.3  # Top drivers faster
+                elif driver in bottom_tier_drivers:
+                    skill_factor += 0.3  # Slower drivers
+
+                lap_time = (
+                    base + skill_factor + random.uniform(-0.1, 0.1)
+                )  # Reduced from -0.2 to 0.2
+
+                # Check for incidents
+                incident_roll = random.randint(1, 100)
+
+                # Log dice roll
+                dice_rolls.append(
+                    {
+                        "session": session_name,
+                        "driver": driver,
+                        "roll_type": "incident_check",
+                        "roll_value": incident_roll,
+                        "outcome": "",
+                    }
+                )
+
+                if incident_roll <= 5:  # 5% crash chance
+                    incident = incident_handler._create_crash_incident(driver)
+                    session.record_incident(incident)
+                    print(f"  ! {driver} crashed - lap deleted, red flag")
+                    dice_rolls[-1]["outcome"] = "crash"
+                    continue
+                elif incident_roll <= 15:  # 10% track limits
+                    incident = incident_handler._create_track_limits_incident(driver)
+                    print(f"  ! {driver} track limits - lap deleted")
+                    dice_rolls[-1]["outcome"] = "track_limits"
+                    continue
+                else:
+                    dice_rolls[-1]["outcome"] = "valid_lap"
+
+                # Record valid lap
+                session.record_lap_time(driver, lap_time)
+
+                # Store lap time in results
+                if session_name in ["Q1", "SQ1"]:
+                    driver_results[driver].q1_time = lap_time
+                elif session_name in ["Q2", "SQ2"]:
+                    driver_results[driver].q2_time = lap_time
+                elif session_name in ["Q3", "SQ3"]:
+                    driver_results[driver].q3_time = lap_time
+
+            # End session and get results
+            if elimination_count > 0:
+                advancing, eliminated = session.end_session()
+                active_drivers = advancing
+
+                # Mark eliminated drivers with grid position calculation
+                num_drivers = len(drivers)  # Actual number of drivers after Andretti filter
+                for driver in eliminated:
+                    driver_results[driver].eliminated_in = session_name
+                    if session_name in ["Q1", "SQ1"]:
+                        # Q1 eliminated: positions (total - elimination_count + 1) to total
+                        q1_start_pos = num_drivers - elimination_count + 1
+                        driver_results[driver].grid_position = (
+                            q1_start_pos + eliminated.index(driver)
+                        )
+                    elif session_name in ["Q2", "SQ2"]:
+                        # Q2 eliminated: positions (Q1 eliminated start - elimination_count) to (Q1 start - 1)
+                        # After Q1 eliminates elimination_count drivers, remaining drivers advance to Q2
+                        # Q2 eliminates elimination_count more drivers
+                        # Q2 positions are right after Q3 positions (which are 1 to num_q3_drivers)
+                        q2_start_pos = num_drivers - 2 * elimination_count + 1
+                        driver_results[driver].grid_position = (
+                            q2_start_pos + eliminated.index(driver)
+                        )
+            else:
+                # For Q3/SQ3, get standings
+                standings = session.get_current_standings()
+                num_q3_drivers = len(active_drivers)
+                # Assign grid positions 1-N based on Q3/SQ3 times
+                for pos, (driver, _) in enumerate(standings[:num_q3_drivers], 1):
+                    driver_results[driver].grid_position = pos
+                # Handle drivers who reached Q3 but have no valid time
+                no_time_drivers = [
+                    d for d in active_drivers if driver_results[d].grid_position == 0
+                ]
+                no_time_drivers.sort(
+                    key=lambda d: driver_results[d].q2_time or float("inf")
+                )
+                for i, driver in enumerate(no_time_drivers):
+                    # Drivers are sorted by best Q2 time first (ascending).
+                    # The driver with the best Q2 time among no-timers gets the best
+                    # available position (right after all drivers who set valid Q3 times).
+                    # Formula: num_q3_drivers - len(no_time_drivers) + 1 + i
+                    # Example: 10 Q3 drivers, 2 no-time -> positions 9 and 10
+                    driver_results[driver].grid_position = (
+                        num_q3_drivers - len(no_time_drivers) + 1 + i
+                    )
+                session.end_session()
+
+        # Collect final results
+        final_results = list(driver_results.values())
+        final_results.sort(key=lambda r: r.grid_position if r.grid_position else 99)
+
+        # Generate output files
+        csv_path = None
+        md_path = None
+
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+
+            # Generate CSV file
+            csv_filename = f"qualifying_results_{track_name.lower()}.csv"
+            csv_path = os.path.join(output_dir, csv_filename)
+
+            with open(csv_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(
+                    [
+                        "Grid Pos",
+                        "Driver",
+                        "Team",
+                        "Q1 Time",
+                        "Q2 Time",
+                        "Q3 Time",
+                        "Best Time",
+                        "Eliminated In",
+                        "Race Start Tyre",
+                    ]
+                )
+
+                for r in final_results:
+                    best = r.get_best_time()
+                    writer.writerow(
+                        [
+                            r.grid_position,
+                            r.driver,
+                            r.team,
+                            f"{r.q1_time:.3f}" if r.q1_time else "",
+                            f"{r.q2_time:.3f}" if r.q2_time else "",
+                            f"{r.q3_time:.3f}" if r.q3_time else "",
+                            f"{best:.3f}" if best else "",
+                            r.eliminated_in if r.eliminated_in else "",
+                            r.race_start_tyre if r.race_start_tyre else "SOFT",
+                        ]
+                    )
+
+            print(f"\nQualifying results saved to: {csv_path}")
+
+            # Generate Markdown report
+            md_filename = f"qualifying_report_{track_name.lower()}.md"
+            md_path = os.path.join(output_dir, md_filename)
+
+            with open(md_path, "w") as f:
+                f.write(
+                    f"# {'Sprint ' if is_sprint_weekend else ''}Qualifying Report - {track_name}\n\n"
+                )
+                f.write(
+                    f"**Session Type:** {'Sprint Qualifying (SQ1/SQ2/SQ3)' if is_sprint_weekend else 'Standard Qualifying (Q1/Q2/Q3)'}\n\n"
+                )
+                f.write("## Starting Grid\n\n")
+                f.write("| Pos | Driver | Team | Q1 | Q2 | Q3 | Best Time |\n")
+                f.write("|-----|--------|------|----|----|----|-----------|\n")
+
+                for r in final_results:
+                    q1_str = f"{r.q1_time:.3f}" if r.q1_time else "-"
+                    q2_str = f"{r.q2_time:.3f}" if r.q2_time else "-"
+                    q3_str = f"{r.q3_time:.3f}" if r.q3_time else "-"
+                    best = r.get_best_time()
+                    best_str = f"{best:.3f}" if best else "-"
+
+                    f.write(
+                        f"| {r.grid_position} | {r.driver} | {r.team} | {q1_str} | {q2_str} | {q3_str} | {best_str} |\n"
+                    )
+
+                f.write("\n## Session Details\n\n")
+
+                if is_sprint_weekend:
+                    f.write(
+                        "- **SQ1:** 12 minutes, eliminate slowest 6 (P17-22 determined)\n"
+                    )
+                    f.write(
+                        "- **SQ2:** 10 minutes, eliminate slowest 6 (P11-16 determined)\n"
+                    )
+                    f.write(
+                        "- **SQ3:** 8 minutes, top 10 battle for pole (P1-10 determined)\n"
+                    )
+                else:
+                    f.write(
+                        "- **Q1:** 18 minutes, eliminate slowest 6 (P17-22 determined)\n"
+                    )
+                    f.write(
+                        "- **Q2:** 15 minutes, eliminate slowest 6 (P11-16 determined)\n"
+                    )
+                    f.write(
+                        "- **Q3:** 12 minutes, top 10 battle for pole (P1-10 determined)\n"
+                    )
+
+                f.write("\n## Notes\n\n")
+                f.write("- All times in seconds\n")
+                f.write("- Grid positions determine the starting order for the ")
+                f.write("sprint race\n" if is_sprint_weekend else "Grand Prix\n")
+
+            print(f"Qualifying report saved to: {md_path}")
+
+            # Generate dice rolls CSV
+            if dice_rolls:
+                dice_csv_filename = f"dice_rolls_{track_name.lower()}.csv"
+                dice_csv_path = os.path.join(output_dir, dice_csv_filename)
+
+                with open(dice_csv_path, "w", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(
+                        ["Session", "Driver", "Roll Type", "Roll Value", "Outcome"]
+                    )
+                    for roll in dice_rolls:
+                        writer.writerow(
+                            [
+                                roll["session"],
+                                roll["driver"],
+                                roll["roll_type"],
+                                roll["roll_value"],
+                                roll["outcome"],
+                            ]
+                        )
+
+                print(f"Dice rolls saved to: {dice_csv_path}")
+
+        return {
+            "session": "qualifying",
+            "status": "completed",
+            "track": track_name,
+            "is_sprint_weekend": is_sprint_weekend,
+            "grid_positions": {r.driver: r.grid_position for r in final_results},
+            "pole_sitter": final_results[0].driver if final_results else None,
+            "csv_path": csv_path,
+            "report_path": md_path,
+        }
+
+    except Exception as e:
+        import traceback
+
+        print(f"Error during qualifying simulation: {e}")
+        traceback.print_exc()
+
+        return {
+            "session": "qualifying",
+            "status": "error",
+            "track": track_name,
+            "error": str(e),
+        }
 
 
 def simulate_sprint(
@@ -595,10 +1369,11 @@ def simulate_sprint(
         import src.sprint
         from src.sprint import run_sprint_race, StartingGridConnector
 
-        # Run sprint race
+        # Run sprint race - pass output_dir if provided
         results = run_sprint_race(
             track_name=track_name,
             seed=seed,
+            output_dir=output_dir,  # Pass race weekend output directory
         )
 
         # Generate session summary if output directory provided
@@ -611,7 +1386,7 @@ def simulate_sprint(
             "track": track_name,
             "results": results,
             "final_positions": results.get("final_positions", {}),
-            "output_dir": results.get("output_dir"),
+            "output_dir": output_dir if output_dir else results.get("output_dir"),
         }
 
     except Exception as e:
@@ -628,11 +1403,78 @@ def simulate_sprint(
         }
 
 
+def _generate_race_report(output_dir: str, track_name: str, gp_name: str) -> None:
+    """Generate a full race report markdown file."""
+    try:
+        # Read race results CSV
+        results_csv = os.path.join(output_dir, f"race_results_{gp_name.lower()}.csv")
+        if not os.path.exists(results_csv):
+            return
+
+        import csv
+
+        with open(results_csv, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            results = list(reader)
+
+        # Read dice rolls CSV
+        dice_csv = os.path.join(output_dir, f"dice_rolls_{gp_name.lower()}.csv")
+        dice_rolls = []
+        if os.path.exists(dice_csv):
+            with open(dice_csv, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                dice_rolls = list(reader)
+
+        # Generate report
+        report_path = os.path.join(output_dir, f"race_report_{gp_name.lower()}.md")
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(f"# Race Report - {track_name}\n\n")
+            f.write(f"**Grand Prix:** {gp_name}\n\n")
+            f.write(f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+            # Results table
+            f.write("## Race Results\n\n")
+            f.write("| Pos | Driver | Team | Total Time | Pits |\n")
+            f.write("|-----|--------|------|------------|------|\n")
+
+            for row in results[:20]:
+                pos = row.get("position", "")
+                driver = row.get("driver", "")
+                team = row.get("team", "")
+                total_time = row.get("total_time", "")
+                pits = row.get("num_pits", "")
+                f.write(f"| {pos} | {driver} | {team} | {total_time}s | {pits} |\n")
+
+            # Dice rolls summary
+            if dice_rolls:
+                f.write("\n## Dice Rolls Summary\n\n")
+                f.write(f"Total dice rolls: {len(dice_rolls)}\n\n")
+
+                # Count by roll type
+                roll_types = {}
+                for roll in dice_rolls:
+                    roll_type = roll.get("roll_type", "unknown")
+                    roll_types[roll_type] = roll_types.get(roll_type, 0) + 1
+
+                f.write("### Roll Types\n\n")
+                for roll_type, count in sorted(roll_types.items()):
+                    f.write(f"- {roll_type}: {count}\n")
+
+            f.write("\n---\n\n")
+            f.write("*Report generated by F1 Race Weekend Simulator*\n")
+
+        print(f"Race report saved to: {report_path}")
+
+    except Exception as e:
+        print(f"Warning: Could not generate race report: {e}")
+
+
 def simulate_race(
     track_name: str,
     seed: Optional[int] = None,
     output_dir: Optional[str] = None,
     is_race_weekend: bool = False,
+    grid_positions: Optional[Dict[str, int]] = None,
     **kwargs,
 ) -> dict:
     """
@@ -645,11 +1487,32 @@ def simulate_race(
         seed: Random seed
         output_dir: Output directory for race weekend (if part of race weekend)
         is_race_weekend: If True, outputs go to race weekend subdir; else original location
+        grid_positions: Dict mapping driver names to grid positions (1-based)
     """
     print(f"\n{'=' * 60}")
     print(f"RACE - Grand Prix")
     print(f"Track: {track_name}")
     print(f"{'=' * 60}")
+
+    # Display grid positions if provided from qualifying or sprint
+    if grid_positions:
+        print(f"\nStarting Grid (from previous session):")
+        print(f"{'-' * 40}")
+        # Determine format: {driver: position} or {position: driver}
+        first_key = next(iter(grid_positions.keys()))
+        if isinstance(first_key, int):
+            # Format is {position: driver} - from sprint
+            sorted_grid = sorted(grid_positions.items(), key=lambda x: x[0])
+            for pos, driver in sorted_grid[:10]:
+                print(f"  P{pos:2d}: {driver}")
+        else:
+            # Format is {driver: position} - from qualifying
+            sorted_grid = sorted(grid_positions.items(), key=lambda x: x[1])
+            for driver, pos in sorted_grid[:10]:
+                print(f"  P{pos:2d}: {driver}")
+        if len(sorted_grid) > 10:
+            print(f"  ... ({len(sorted_grid) - 10} more drivers)")
+        print(f"{'-' * 40}")
 
     # Import the race simulation module
     import src.simulation.enhanced_long_dist_sim as elds
@@ -659,8 +1522,9 @@ def simulate_race(
     track_config = AVAILABLE_TRACKS.get(track_name, {})
     gp_name = track_config.get("gp_name", track_name)
 
-    # Create driver CSV file for this track if it doesn't exist
-    csv_path = create_driver_csv(gp_name)
+    # Create driver CSV file for this track
+    # If grid_positions provided from qualifying/sprint, use them
+    csv_path = create_driver_csv(gp_name, grid_positions=grid_positions)
 
     # Prepare arguments for the simulation
     sim_args = [f"--gp-name", gp_name, "--csv-file", csv_path]
@@ -668,33 +1532,45 @@ def simulate_race(
     if seed is not None:
         sim_args.extend(["--seed", str(seed)])
 
+    # Determine output directory
+    if is_race_weekend and output_dir:
+        # When part of race weekend, save directly to race weekend directory
+        sim_args.extend(["--output-dir", output_dir])
+        race_output_path = output_dir
+    else:
+        # When run independently, use default location
+        race_output_path = None
+
     # Run the race simulation
     print(f"\nStarting race simulation for {gp_name}...")
-
-    # Track where the race outputs are stored
-    race_output_path = None
-    original_output_dir = "outputs/enhanced_sim"
 
     try:
         result = elds.main(sim_args)
 
-        # Check if simulation returned valid results
-        if result is None:
-            raise RuntimeError("Race simulation returned no results")
+        # Note: enhanced_long_dist_sim.main() returns None (it writes to files instead)
+        # So we check for output files instead of return value
+        # The race simulation runs and generates files regardless of return value
 
-        # Find the most recent output directory for this track
-        # The simulation creates: outputs/enhanced_sim/{track}_{datetime}
-        if os.path.exists(original_output_dir):
-            # Get all subdirectories matching the track name
-            pattern = os.path.join(original_output_dir, f"{gp_name}_*")
-            dirs = glob.glob(pattern)
-            if dirs:
-                # Sort by modification time, get most recent
-                race_output_path = max(dirs, key=os.path.getmtime)
+        # If not using custom output dir, find the most recent output directory
+        if race_output_path is None:
+            original_output_dir = "outputs/enhanced_sim"
+            if os.path.exists(original_output_dir):
+                # Get all subdirectories matching the track name
+                pattern = os.path.join(original_output_dir, f"{gp_name}_*")
+                dirs = glob.glob(pattern)
+                if dirs:
+                    # Sort by modification time, get most recent
+                    race_output_path = max(dirs, key=os.path.getmtime)
 
-        # For race weekend mode, copy outputs to the race weekend directory
+        # For race weekend mode, files are already in the correct location
         copied_files = {}
-        if is_race_weekend and output_dir and race_output_path:
+        if (
+            is_race_weekend
+            and output_dir
+            and race_output_path
+            and race_output_path != output_dir
+        ):
+            # Only copy if files are not already in the correct location
             copied_files = copy_race_outputs_to_weekend(
                 race_output_path, output_dir, gp_name
             )
@@ -702,6 +1578,9 @@ def simulate_race(
         # Generate session summary if output directory provided
         if output_dir:
             generate_session_summary("race", track_name, "completed", output_dir)
+
+            # Generate full race report
+            _generate_race_report(output_dir, track_name, gp_name)
 
         return {
             "session": "race",
@@ -791,15 +1670,49 @@ def run_race_weekend(
 
     results = {}
     for session in sessions:
-        if session.lower() in session_map:
-            session_key = session.lower()
+        session_key = session.lower()
+
+        # Skip sprint for non-sprint tracks
+        if session_key == "sprint" and track_name not in SPRINT_TRACKS:
+            print(f"\nSkipping sprint - {track_name} is not a sprint weekend track")
+            results[session_key] = {
+                "session": "sprint",
+                "status": "not_applicable",
+                "track": track_name,
+                "message": f"{track_name} does not have a sprint race",
+            }
+            continue
+
+        if session_key in session_map:
             session_output_dir = session_dirs.get(session_key)
 
             # Pass is_race_weekend=True only for full race weekend simulation
             extra_kwargs = {}
-            if session_key == "race" and is_full_weekend:
-                extra_kwargs["is_race_weekend"] = True
+            if is_full_weekend:
                 extra_kwargs["output_dir"] = session_output_dir
+                if session_key == "race":
+                    extra_kwargs["is_race_weekend"] = True
+                    # Pass grid positions from sprint (if sprint weekend) or qualifying
+                    if (
+                        "sprint" in results
+                        and results["sprint"].get("status") == "completed"
+                    ):
+                        # Sprint final_positions is {position: driver}, need to convert to {driver: position}
+                        sprint_positions = results["sprint"].get("final_positions", {})
+                        # Convert format: {1: "Verstappen"} -> {"Verstappen": 1}
+                        extra_kwargs["grid_positions"] = {
+                            driver: int(pos) for pos, driver in sprint_positions.items()
+                        }
+                    elif (
+                        "qualifying" in results
+                        and results["qualifying"].get("status") == "completed"
+                    ):
+                        extra_kwargs["grid_positions"] = results["qualifying"].get(
+                            "grid_positions", {}
+                        )
+                elif session_key == "qualifying":
+                    # Check if this is a sprint weekend track
+                    extra_kwargs["is_sprint_weekend"] = track_name in SPRINT_TRACKS
 
             result = session_map[session_key](
                 track_name,
@@ -914,7 +1827,7 @@ Examples:
   %(prog)s --test-suite
 
 Available tracks:
-  Monaco, Spain, Monza, Italy, Australia, Bahrain, China, Japan
+  Monaco, Spain, Monza, Italy, Australia, Bahrain, China, Japan, Austria
         """,
     )
 
@@ -980,7 +1893,6 @@ Available tracks:
         return 1
 
     print(f"\n{'#' * 70}")
-    print(f"# SIMULATION COMPLETE")
     print(f"{'#' * 70}")
 
     return 0

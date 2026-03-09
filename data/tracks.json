@@ -1,0 +1,71 @@
+{
+    "_description": "Track configurations available for simulation",
+    "_note": "The gp_name field is used for track characteristics lookup",
+    "available_tracks": {
+        "Monaco": {
+            "gp_name": "Monaco",
+            "description": "Street circuit, low speed, high complexity",
+            "characteristics": "low_speed, high_complexity, street_circuit"
+        },
+        "Spain": {
+            "gp_name": "Spain",
+            "description": "Technical, medium speed",
+            "characteristics": "medium_speed, technical"
+        },
+        "Monza": {
+            "gp_name": "Monza",
+            "description": "High speed, low downforce",
+            "characteristics": "high_speed, low_downforce"
+        },
+        "Italy": {
+            "gp_name": "Spain",
+            "description": "High speed, low downforce (Imola)",
+            "characteristics": "high_speed, medium_downforce"
+        },
+        "Australia": {
+            "gp_name": "Australia",
+            "description": "Street circuit, medium speed",
+            "characteristics": "street_circuit, medium_speed"
+        },
+        "Bahrain": {
+            "gp_name": "Bahrain",
+            "description": "Desert circuit, medium-high speed",
+            "characteristics": "desert, medium_speed"
+        },
+        "China": {
+            "gp_name": "China",
+            "description": "Technical, medium speed",
+            "characteristics": "technical, medium_speed"
+        },
+        "Japan": {
+            "gp_name": "Japan",
+            "description": "High downforce, technical",
+            "characteristics": "high_downforce, technical"
+        },
+        "Austria": {
+            "gp_name": "Austria",
+            "description": "Red Bull Ring - High speed, short lap",
+            "characteristics": "high_speed, short_lap, overtaking"
+        }
+    },
+    "sprint_tracks": {
+        "Imola": {
+            "gp_name": "Imola",
+            "description": "Emilia Romagna GP - High downforce, technical, narrow",
+            "characteristics": "high_downforce, technical, narrow",
+            "sprint_laps": 21
+        },
+        "Austria": {
+            "gp_name": "Austria",
+            "description": "Red Bull Ring - High speed, short lap, 3 DRS zones",
+            "characteristics": "high_speed, short_lap, overtaking",
+            "sprint_laps": 24
+        },
+        "Sao_Paulo": {
+            "gp_name": "Brazil",
+            "description": "Interlagos - Anti-clockwise, high altitude, overtaking friendly",
+            "characteristics": "anti_clockwise, high_altitude, overtaking",
+            "sprint_laps": 24
+        }
+    }
+}
