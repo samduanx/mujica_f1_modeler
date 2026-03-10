@@ -41,7 +41,125 @@ import traceback
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 
-# Import incident system modules (using src prefix)
+# Rating compensation functions (embedded to avoid import issues)
+# These are duplicated from core/rating_compensator.py
+from collections import defaultdict as _dd
+
+TEAM_TIERS = {
+    "TOP": {
+        "teams": {"red_bull", "ferrari", "mercedes", "mclaren", "aston_martin"},
+        "max_compensation": 0.35,
+    },
+    "MID": {"teams": {"alpine", "williams"}, "max_compensation": 0.25},
+    "BACK": {"teams": {"alphatauri", "alfa_romeo", "haas"}, "max_compensation": 0.15},
+}
+
+
+def _get_team_tier(team_id):
+    team_id_lower = team_id.lower()
+    for tier, config in TEAM_TIERS.items():
+        if team_id_lower in config["teams"]:
+            return tier
+    return "MID"
+
+
+def _calculate_compensated_r_core(
+    base_r, team_leader_r, team_tier, is_number_2, driver_id
+):
+    if not is_number_2:
+        return 0.0, 0.0
+    gap_to_leader = team_leader_r - base_r
+    if gap_to_leader <= 0:
+        return 0.0, 0.0
+    tier_config = TEAM_TIERS.get(team_tier, TEAM_TIERS["MID"])
+    max_comp = tier_config["max_compensation"]
+    compensation = min(gap_to_leader * 0.5, max_comp)
+    # Special handling for Tsunoda
+    if driver_id.upper() == "TSUNODA":
+        compensation *= 0.5
+    return max(0.0, compensation), gap_to_leader
+
+
+def _get_team_leader_r_values_embedded(driver_data):
+    """Calculate each team's leader R value."""
+    teams = _dd(list)
+    for driver_name, data in driver_data.items():
+        team = data.get("Team", "Unknown")
+        dr = data.get("DR_Value", data.get("dr_value", 100.0))
+        pr = data.get("PR_Value", data.get("team_pr", 300.0))
+        r_value = dr * pr / 100.0
+        teams[team].append((driver_name, r_value))
+    
+    team_leaders = {}
+    for team, drivers in teams.items():
+        drivers_sorted = sorted(drivers, key=lambda x: x[1], reverse=True)
+        team_leaders[team] = drivers_sorted[0][1]
+    return team_leaders
+
+
+def _is_number_2_driver_embedded(driver_name, driver_data):
+    """Check if driver is #2 based on R value."""
+    if driver_name not in driver_data:
+        return False
+    
+    team = driver_data[driver_name].get("Team", "Unknown")
+    
+    team_drivers = [
+        (d, data.get("DR_Value", data.get("dr_value", 100.0)) * data.get("PR_Value", data.get("team_pr", 300.0)) / 100.0)
+        for d, data in driver_data.items()
+        if data.get("Team") == team
+    ]
+    
+    if len(team_drivers) < 2:
+        return False
+    
+    team_drivers_sorted = sorted(team_drivers, key=lambda x: x[1], reverse=True)
+    return driver_name != team_drivers_sorted[0][0]
+
+
+def get_team_leader_r_values(driver_data):
+    """Calculate each team's leader R value."""
+    teams = defaultdict(list)
+    for driver_name, data in driver_data.items():
+        team = data.get("Team", "Unknown")
+        dr = data.get("DR_Value", data.get("dr_value", 100.0))
+        pr = data.get("PR_Value", data.get("team_pr", 300.0))
+        r_value = dr * pr / 100.0
+        teams[team].append((driver_name, r_value))
+
+    team_leaders = {}
+    for team, drivers in teams.items():
+        drivers_sorted = sorted(drivers, key=lambda x: x[1], reverse=True)
+        team_leaders[team] = drivers_sorted[0][1]
+
+    return team_leaders
+
+
+def is_number_2_driver(driver_name, driver_data):
+    """Check if driver is #2 based on R value."""
+    if driver_name not in driver_data:
+        return False
+
+    team = driver_data[driver_name].get("Team", "Unknown")
+
+    team_drivers = [
+        (
+            d,
+            data.get("DR_Value", data.get("dr_value", 100.0))
+            * data.get("PR_Value", data.get("team_pr", 300.0))
+            / 100.0,
+        )
+        for d, data in driver_data.items()
+        if data.get("Team") == team
+    ]
+
+    if len(team_drivers) < 2:
+        return False
+
+    team_drivers_sorted = sorted(team_drivers, key=lambda x: x[1], reverse=True)
+    return driver_name != team_drivers_sorted[0][0]
+
+
 from incidents import (
     IncidentManager,
     IncidentType,
@@ -2655,7 +2773,36 @@ class EnhancedRaceSimulator:
         # Get driver's DR value
         dr_value = driver_info.get("DR_Value", 100.0)
 
-        base_lap_time = calculate_base_lap_time(dr_value, team_pr, self.track_name)
+        # Apply hidden R compensation for #2 drivers
+        # Calculate team leader R values once per race
+        if not hasattr(self, "_team_leader_r_values"):
+            self._team_leader_r_values = _get_team_leader_r_values_embedded(
+                self.driver_data
+            )
+
+        team_leader_r = self._team_leader_r_values.get(team, dr_value * team_pr / 100.0)
+        is_num2 = _is_number_2_driver_embedded(driver, self.driver_data)
+
+        base_r = dr_value * team_pr / 100.0
+        team_tier = _get_team_tier(team)
+        compensation_value, gap_to_leader = _calculate_compensated_r_core(
+            base_r, team_leader_r, team_tier, is_num2, driver
+        )
+
+        r_for_laptime = base_r + compensation_value
+        r_for_degradation = base_r  # Original R for degradation
+
+        if compensation_value > 0:
+            print(
+                f"  [Compensation] {driver}: +{compensation_value:.3f} R ({team_tier} tier)"
+            )
+
+        # Calculate lap time using compensated R value
+        # R for lap time = compensated DR * PR / 100
+        compensated_dr_for_laptime = r_for_laptime * 100.0 / team_pr
+        base_lap_time = calculate_base_lap_time(
+            compensated_dr_for_laptime, team_pr, self.track_name
+        )
 
         # Calculate degradation - PR (car) affects tire management
         # Better car = better tire management = slower degradation

@@ -5,7 +5,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 import os
+import sys
 from collections import defaultdict
+
+# Import rating compensator for hidden R compensation (direct file import)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from core.rating_compensator import (
+    calculate_compensated_r,
+    TEAM_TIERS
+)
 
 
 ## Use non-interactive backend to avoid font and GUI issues
@@ -167,6 +175,67 @@ def get_track_tyre_weights(track_name):
     }
 
     return track_weights.get(track_name, {"C1": 0.33, "C2": 0.33, "C3": 0.34})
+
+
+def get_team_leader_r_values(driver_data):
+    """
+    计算每个车队一号车手的R值
+    
+    Args:
+        driver_data: 车手数据字典，格式为 {driver_name: {Team, R_Value, DR_Value, ...}}
+    
+    Returns:
+        dict: {team_name: leader_r_value}
+    """
+    # 按车队分组
+    teams = defaultdict(list)
+    for driver_name, data in driver_data.items():
+        team = data.get("Team", "Unknown")
+        r_value = data.get("R_Value", 300.0)
+        teams[team].append((driver_name, r_value))
+    
+    # 找出每个车队R值最高的车手（一号车手）
+    team_leaders = {}
+    for team, drivers in teams.items():
+        # 按R值排序，取最高的
+        drivers_sorted = sorted(drivers, key=lambda x: x[1], reverse=True)
+        team_leaders[team] = drivers_sorted[0][1]  # 最高的R值
+    
+    return team_leaders
+
+
+def is_number_2_driver(driver_name, driver_data):
+    """
+    判断是否为二号车手（基于R值低于车队老大）
+    
+    Args:
+        driver_name: 车手名称
+        driver_data: 车手数据字典
+    
+    Returns:
+        bool: 是否为二号车手
+    """
+    if driver_name not in driver_data:
+        return False
+    
+    team = driver_data[driver_name].get("Team", "Unknown")
+    driver_r = driver_data[driver_name].get("R_Value", 300.0)
+    
+    # 获取该车队所有车手的R值
+    team_drivers = [
+        (d, data.get("R_Value", 300.0))
+        for d, data in driver_data.items()
+        if data.get("Team") == team
+    ]
+    
+    if len(team_drivers) < 2:
+        return False
+    
+    # 按R值排序
+    team_drivers_sorted = sorted(team_drivers, key=lambda x: x[1], reverse=True)
+    
+    # 如果该车手不是车队R值最高的，则为二号车手
+    return driver_name != team_drivers_sorted[0][0]
 
 
 def get_team_strategy(track_name, team_name, num_laps, pit_data):
@@ -1902,8 +1971,39 @@ def simulate_race_with_pit_stops(
     dr_max,
     pit_data,
     team_strategies=None,
+    team_leader_r_values=None,
 ):
     """Simulate race with pit stops"""
+
+    # Calculate compensated R value for lap time calculation
+    # This applies hidden compensation to reduce gap between #1 and #2 drivers
+    team = driver_info.get("Team", "Unknown")
+    team_leader_r = team_leader_r_values.get(team, driver_info["R_Value"]) if team_leader_r_values else driver_info["R_Value"]
+    
+    # Check if this is a number 2 driver
+    is_num2 = is_number_2_driver(driver_name, {driver_name: driver_info})
+    
+    # Calculate compensated R for lap time calculation
+    # Note: We use a simplified DR and PR here since we only have R_Value
+    # In a full integration, DR and PR would be passed separately
+    # For now, we approximate: R = DR * PR / 100, and PR is typically around 300
+    approx_pr = 305.0  # Typical PR value
+    approx_dr = driver_info["R_Value"] * 100.0 / approx_pr
+    
+    comp_result = calculate_compensated_r(
+        dr_value=approx_dr,
+        pr_value=approx_pr,
+        driver_id=driver_name,
+        team_id=team,
+        is_number_2_driver=is_num2,
+        team_leader_r=team_leader_r
+    )
+    
+    r_value_for_laptime = comp_result.compensated_r
+    r_value_for_degradation = driver_info["R_Value"]  # Keep original for degradation
+    
+    if comp_result.compensation_value > 0:
+        print(f"  [Compensation] {driver_name}: +{comp_result.compensation_value:.3f} R ({comp_result.team_tier} tier)")
 
     # Load pitlane time data
     pitlane_data = load_pitlane_time_data()
@@ -2058,13 +2158,15 @@ def simulate_race_with_pit_stops(
 
         # Calculate base lap time using track-specific formula
         # Uses the new TRACK_BASE_LAP_TIMES configuration
-        base_lap_time = calculate_base_lap_time(driver_info["R_Value"], track_name)
+        # Uses COMPENSATED R value for lap time calculation only
+        base_lap_time = calculate_base_lap_time(r_value_for_laptime, track_name)
 
         # Tire degradation
+        # Uses ORIGINAL R value for degradation (not compensated)
         degradation = calculate_degradation_with_cliff(
             lap_count_on_current_tyre,
             current_tyre,
-            driver_info["R_Value"],
+            r_value_for_degradation,
             r_max,
             track_chars,
             len(pit_laps),
@@ -2278,6 +2380,12 @@ def main(argv=None):
         grid_pos = driver_data[driver_name]["grid_position"]
         print(f"  {grid_pos:2d}: {driver_name}")
 
+    # Calculate team leader R values for compensation
+    print(f"\n=== Calculating Team Leader R Values for Compensation ===")
+    team_leader_r_values = get_team_leader_r_values(driver_data)
+    for team, leader_r in team_leader_r_values.items():
+        print(f"  {team}: Leader R = {leader_r:.2f}")
+
     # 6. Simulate race for each driver
     print(f"\n=== Starting Race Simulation ===")
     print(f"Total laps: {num_laps}")
@@ -2298,6 +2406,7 @@ def main(argv=None):
             dr_max,
             pit_data,
             team_strategies=driver_team_strategies,
+            team_leader_r_values=team_leader_r_values,
         )
         results[driver_name] = result
         result["driver_name"] = driver_name
