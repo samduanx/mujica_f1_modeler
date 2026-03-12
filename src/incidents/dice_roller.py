@@ -166,17 +166,29 @@ class DiceRoller:
         rolls = [random.randint(1, 100) for _ in range(10)]
         return sum(rolls), rolls
 
-    def roll_for_stability(self, stability: float, check_type: str = "normal") -> Dict:
+    def roll_for_stability(
+        self, stability: float, check_type: str = "normal", team_name: str = None
+    ) -> Dict:
         """
         Roll for stability check based on dice_rolling_rules.md.
 
         Args:
             stability: Team stability value (95-100)
             check_type: Type of check ("normal", "engine", "mechanical", "tyre")
+            team_name: Team name for narrative assistance
 
         Returns:
             Dictionary with roll details and result
         """
+        # Apply narrative assistance to stability if enabled
+        if team_name:
+            try:
+                from src.core.narrative_assist import ProbabilityBalancer
+
+                balancer = ProbabilityBalancer()
+                stability = balancer.balance_stability(stability, team_name)
+            except ImportError:
+                pass
         total, rolls = self.roll_10d100()
 
         # Determine result based on stability

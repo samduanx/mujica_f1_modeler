@@ -80,7 +80,8 @@ class DriverErrorProbability:
         race_position: int,
         under_pressure: bool,
         is_first_lap: bool = False,
-        r_value: float = None,
+        r_value: Optional[float] = None,
+        team_name: Optional[str] = None,
     ) -> float:
         """
         Calculate error probability for a driver.
@@ -93,6 +94,7 @@ class DriverErrorProbability:
             under_pressure: Being pressured by car behind
             is_first_lap: Whether this is the first lap
             r_value: Driver's R value (100.5 = elite, <99 = lower tier)
+            team_name: Driver's team name (for narrative assistance)
 
         Returns:
             Error probability (0.0 to 1.0)
@@ -139,6 +141,15 @@ class DriverErrorProbability:
             prob *= 1.5
         elif lap_number <= 3:
             prob *= 1.2
+
+        # Apply narrative assistance if enabled
+        if team_name:
+            try:
+                from src.core.narrative_assist import ProbabilityBalancer
+                balancer = ProbabilityBalancer()
+                prob = balancer.balance_error_probability(prob, team_name)
+            except ImportError:
+                pass
 
         return max(0.0, min(1.0, prob))
 

@@ -85,6 +85,7 @@ from incidents.red_flag import (
     RedFlagTrigger,
     RedFlagManager,
     RedFlagRestart,
+    RedFlagRepairManager,
 )
 from incidents.rolling_start import (
     RollingStartPhase,
@@ -160,6 +161,7 @@ __all__ = [
     "RedFlagTrigger",
     "RedFlagManager",
     "RedFlagRestart",
+    "RedFlagRepairManager",
     # Rolling Start
     "RollingStartPhase",
     "RollingStartConfig",

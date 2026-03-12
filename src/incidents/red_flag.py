@@ -595,3 +595,188 @@ class RedFlagRestart:
             return "Race abandoned (less than 2 laps)"
         else:
             return "Race completed normally"
+
+
+@dataclass
+class RedFlagRepairManager:
+    """
+    Manage car repairs during red flag periods.
+
+    During a red flag, teams in the pits can attempt repairs on damaged cars.
+    The repair amount is determined by a dice roll proportional to damage severity.
+
+    Damage Severity Tiers:
+    - Minor (0-20%): Base 70% repair rate
+    - Moderate (21-50%): Base 50% repair rate
+    - Severe (51-80%): Base 35% repair rate
+    - Critical (81%+): Base 30% repair rate
+
+    Repair Formula:
+    - Roll 1d100 (percentage 1-100)
+    - Actual Repair = dice_roll * base_repair_rate / 100
+    """
+
+    # Minimum damage threshold to attempt repair
+    min_damage_threshold: float = 0.05  # 5%
+
+    # Repair rate by damage severity
+    repair_rates: Dict[str, float] = field(
+        default_factory=lambda: {
+            "minor": 0.70,  # 0-20% damage
+            "moderate": 0.50,  # 21-50% damage
+            "severe": 0.35,  # 51-80% damage
+            "critical": 0.30,  # 81%+ damage
+        }
+    )
+
+    # Repair history
+    repair_history: List[Dict] = field(default_factory=list)
+
+    def _get_damage_tier(self, damage_severity: float) -> str:
+        """Determine damage tier based on severity."""
+        if damage_severity <= 0.20:
+            return "minor"
+        elif damage_severity <= 0.50:
+            return "moderate"
+        elif damage_severity <= 0.80:
+            return "severe"
+        else:
+            return "critical"
+
+    def _get_base_repair_rate(self, damage_tier: str) -> float:
+        """Get base repair rate for damage tier."""
+        return self.repair_rates.get(damage_tier, 0.50)
+
+    def calculate_repair(
+        self,
+        driver: str,
+        damage_severity: float,
+        damage_type: str = "general",
+        lap: int = 0,
+    ) -> Dict:
+        """
+        Calculate repair amount using dice roll.
+
+        Args:
+            driver: Driver name
+            damage_severity: Current damage level (0.0 to 1.0+)
+            damage_type: Type of damage (incident, widelonso, fault, general)
+            lap: Current lap number
+
+        Returns:
+            Dict with repair details:
+            - driver: Driver name
+            - dice_roll: 1-100
+            - base_repair_rate: 0.0-1.0
+            - actual_repair: 0.0-1.0 (amount repaired)
+            - damage_before: Damage before repair
+            - damage_after: Damage after repair
+            - fully_repaired: Whether damage is now 0
+            - damage_tier: minor/moderate/severe/critical
+        """
+        # Don't repair if damage is below threshold
+        if damage_severity < self.min_damage_threshold:
+            return {
+                "driver": driver,
+                "dice_roll": 0,
+                "base_repair_rate": 0.0,
+                "actual_repair": 0.0,
+                "damage_before": damage_severity,
+                "damage_after": damage_severity,
+                "fully_repaired": False,
+                "damage_tier": self._get_damage_tier(damage_severity),
+                "repaired": False,
+                "reason": "Damage below repair threshold",
+            }
+
+        import random
+
+        # Roll 1d100
+        dice_roll = random.randint(1, 100)
+
+        # Determine damage tier and base repair rate
+        damage_tier = self._get_damage_tier(damage_severity)
+        base_rate = self._get_base_repair_rate(damage_tier)
+
+        # Calculate actual repair amount
+        # dice_roll (1-100) * base_rate / 100 = 0.01 to base_rate
+        actual_repair = (dice_roll * base_rate) / 100.0
+
+        # Apply repair (cap at 100% repair)
+        damage_after = max(0.0, damage_severity - actual_repair)
+        fully_repaired = damage_after < self.min_damage_threshold
+
+        result = {
+            "driver": driver,
+            "dice_roll": dice_roll,
+            "base_repair_rate": round(base_rate, 2),
+            "actual_repair": round(actual_repair, 4),
+            "damage_before": round(damage_severity, 4),
+            "damage_after": round(damage_after, 4),
+            "fully_repaired": fully_repaired,
+            "damage_tier": damage_tier,
+            "repaired": True,
+            "lap": lap,
+            "damage_type": damage_type,
+        }
+
+        # Record repair
+        self.repair_history.append(result)
+
+        return result
+
+    def repair_all_drivers(
+        self,
+        driver_damage: Dict[str, Dict],
+        lap: int = 0,
+    ) -> List[Dict]:
+        """
+        Attempt repairs for all drivers with damage.
+
+        Args:
+            driver_damage: Dict of driver -> damage info
+                Format: {"Verstappen": {"total_damage": 0.45, "type": "incident"}, ...}
+            lap: Current lap number
+
+        Returns:
+            List of repair results for drivers who were repaired
+        """
+        results = []
+
+        for driver, damage_info in driver_damage.items():
+            damage_amount = damage_info.get("total_damage", 0.0)
+            damage_type = damage_info.get("type", "general")
+
+            if damage_amount >= self.min_damage_threshold:
+                repair_result = self.calculate_repair(
+                    driver=driver,
+                    damage_severity=damage_amount,
+                    damage_type=damage_type,
+                    lap=lap,
+                )
+                results.append(repair_result)
+
+        return results
+
+    def get_repair_summary(self) -> Dict:
+        """Get summary of all repairs during red flag."""
+        if not self.repair_history:
+            return {"total_repairs": 0, "repairs": []}
+
+        total_repairs = len(self.repair_history)
+        fully_repaired = sum(
+            1 for r in self.repair_history if r.get("fully_repaired", False)
+        )
+        avg_dice_roll = sum(r["dice_roll"] for r in self.repair_history) / total_repairs
+
+        return {
+            "total_repairs": total_repairs,
+            "fully_repaired": fully_repaired,
+            "partially_repaired": total_repairs - fully_repaired,
+            "average_dice_roll": round(avg_dice_roll, 1),
+            "repairs": self.repair_history,
+        }
+
+    def clear_history(self):
+        """Clear repair history (call after race ends)."""
+        self.repair_history.clear()

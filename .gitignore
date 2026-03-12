@@ -11,3 +11,10 @@ src/core/__pycache__/
 src/tyre/__pycache__/
 src/simulation/__pycache__/
 plans/
+
+# Narrative assist system documentation (internal use only)
+docs/NARRATIVE_ASSIST_SYSTEM.md
+docs/NARRATIVE_ASSIST_IMPLEMENTATION.md
+docs/INJECTION_SCHEME_V1.md
+docs/*cheat*.md
+docs/*injection*.md

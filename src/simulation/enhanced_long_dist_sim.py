@@ -89,7 +89,7 @@ def _get_team_leader_r_values_embedded(driver_data):
         pr = data.get("PR_Value", data.get("team_pr", 300.0))
         r_value = dr * pr / 100.0
         teams[team].append((driver_name, r_value))
-    
+
     team_leaders = {}
     for team, drivers in teams.items():
         drivers_sorted = sorted(drivers, key=lambda x: x[1], reverse=True)
@@ -101,18 +101,23 @@ def _is_number_2_driver_embedded(driver_name, driver_data):
     """Check if driver is #2 based on R value."""
     if driver_name not in driver_data:
         return False
-    
+
     team = driver_data[driver_name].get("Team", "Unknown")
-    
+
     team_drivers = [
-        (d, data.get("DR_Value", data.get("dr_value", 100.0)) * data.get("PR_Value", data.get("team_pr", 300.0)) / 100.0)
+        (
+            d,
+            data.get("DR_Value", data.get("dr_value", 100.0))
+            * data.get("PR_Value", data.get("team_pr", 300.0))
+            / 100.0,
+        )
         for d, data in driver_data.items()
         if data.get("Team") == team
     ]
-    
+
     if len(team_drivers) < 2:
         return False
-    
+
     team_drivers_sorted = sorted(team_drivers, key=lambda x: x[1], reverse=True)
     return driver_name != team_drivers_sorted[0][0]
 
@@ -1406,7 +1411,21 @@ class RaceState:
         self.weather_vsc_triggered: bool = False
         self.weather_sc_triggered: bool = False
         self.last_weather_trigger_lap: int = 0  # Track lap of last weather trigger
-        self.weather_trigger_cooldown: int = 5  # Minimum laps between weather triggers"
+        self.weather_trigger_cooldown: int = 5  # Minimum laps between weather triggers
+
+        # RED FLAG DAMAGE TRACKING - For car repair mechanic
+        # Tracks damage per driver for red flag repair calculations
+        # Format: {"Verstappen": {"total_damage": 0.45, "type": "incident"}, ...}
+        self.driver_damage: Dict[str, Dict] = {}
+
+        # Red Flag Repair Manager
+        from incidents.red_flag import RedFlagRepairManager
+
+        self.red_flag_repair_manager = RedFlagRepairManager()
+
+        # FRONT WING REPLACEMENT - Tracks front wing damage per driver
+        # Format: {"Verstappen": {"damage": 0.35, "severity": "moderate", "source": "driver_error"}, ...}
+        self.front_wing_damage: Dict[str, Dict] = {}
 
     def update_positions(self, driver_times: Dict[str, float]):
         """Update driver positions based on cumulative times."""
@@ -1529,6 +1548,11 @@ class EnhancedRaceSimulator:
         from src.utils.config_loader import get_all_teams_pr
 
         self.team_pr_values = get_all_teams_pr(track_name)
+
+        # Initialize front wing replacement manager
+        from src.pit_stop.front_wing_replacement import FrontWingManager
+
+        self.front_wing_manager = FrontWingManager()
 
         # Track simulation start time for relative timestamps
         self.simulation_start_time: Optional[datetime] = None
@@ -2040,6 +2064,10 @@ class EnhancedRaceSimulator:
             print(f"\n*** RED FLAG at Lap {lap}: Torrential rain conditions ***")
             self.race_state.red_flag_active = True
             self.race_state.last_weather_trigger_lap = lap
+
+            # Handle car repairs during red flag
+            self.handle_red_flag_repairs(lap)
+
             return {
                 "type": "red_flag",
                 "lap": lap,
@@ -2341,6 +2369,19 @@ class EnhancedRaceSimulator:
                         }
                     )
 
+                    # Create front wing damage for moderate+ aerodynamic-related faults
+                    # Roll d6 to determine if it's an aero fault (1-2 = aero)
+                    component_roll = roll_d6()
+                    if component_roll <= 2 and severity in ("moderate", "major", "catastrophic"):
+                        damage = self.front_wing_manager.create_damage_from_incident(
+                            driver=driver,
+                            incident_type="vehicle_fault",
+                            incident_severity=severity,
+                            lap=lap,
+                        )
+                        if damage:
+                            self.race_state.front_wing_damage[driver] = damage.to_dict()
+
                     # After a fault, schedule next check sooner (more likely to have issues)
                     # Use d6: 1-3 laps
                     next_check = roll_d6()
@@ -2382,6 +2423,13 @@ class EnhancedRaceSimulator:
 
                 if error_roll <= error_threshold:
                     error_type_roll = roll_d6()
+                    error_severity = (
+                        "minor"
+                        if error_roll <= error_threshold * 0.4
+                        else "moderate"
+                        if error_roll <= error_threshold * 0.7
+                        else "major"
+                    )
                     incidents.append(
                         {
                             "type": "driver_error",
@@ -2392,9 +2440,36 @@ class EnhancedRaceSimulator:
                             else "off_track"
                             if error_type_roll <= 4
                             else "mistake",
+                            "severity": error_severity,
                             "time_loss": random.uniform(0.5, 3.0),
                         }
                     )
+
+                    # Create front wing damage from driver error
+                    from src.pit_stop.front_wing_replacement import (
+                        FrontWingManager,
+                        FrontWingSeverity,
+                    )
+
+                    severity_map = {
+                        "minor": FrontWingSeverity.MINOR,
+                        "moderate": FrontWingSeverity.MODERATE,
+                        "major": FrontWingSeverity.MAJOR,
+                    }
+                    front_wing_severity = severity_map.get(
+                        error_severity, FrontWingSeverity.MINOR
+                    )
+
+                    damage = self.front_wing_manager.create_damage_from_incident(
+                        driver=driver,
+                        incident_type="driver_error",
+                        incident_severity=error_severity,
+                        lap=lap,
+                    )
+
+                    # Sync with race_state
+                    if damage:
+                        self.race_state.front_wing_damage[driver] = damage.to_dict()
 
                 # Schedule next driver error check (every 3-5 laps to reduce frequency)
                 next_error_check = random.randint(3, 5)
@@ -2447,6 +2522,18 @@ class EnhancedRaceSimulator:
                 dnf_roll = random.random()  # 0-1
                 if dnf_roll < 0.001:  # 0.1% chance
                     is_dnf = True
+
+            # Create front wing damage for both drivers involved in collision
+            if not is_dnf:  # Only if not a DNF-causing collision
+                for collision_driver in [driver_a, driver_b]:
+                    damage = self.front_wing_manager.create_damage_from_incident(
+                        driver=collision_driver,
+                        incident_type="overtake_collision",
+                        incident_severity=severity,
+                        lap=lap,
+                    )
+                    if damage:
+                        self.race_state.front_wing_damage[collision_driver] = damage.to_dict()
 
             return {
                 "type": "overtake_collision",
@@ -2616,6 +2703,94 @@ class EnhancedRaceSimulator:
             "reason": reason,
         }
 
+    def handle_red_flag_repairs(self, lap: int) -> List[Dict]:
+        """
+        Handle car repairs during red flag period.
+
+        Teams can attempt repairs on damaged cars while in the pits.
+        The repair amount is determined by dice rolls based on damage severity.
+
+        Args:
+            lap: Current lap number
+
+        Returns:
+            List of repair results for drivers who were repaired
+        """
+        if not self.race_state.driver_damage:
+            return []
+
+        print(f"\n*** RED FLAG REPAIRS at Lap {lap} ***")
+        print("Teams are working on damaged cars in the pits...")
+
+        # Get repair manager from race state
+        repair_manager = self.race_state.red_flag_repair_manager
+
+        # Attempt repairs for all drivers with damage
+        repair_results = repair_manager.repair_all_drivers(
+            driver_damage=self.race_state.driver_damage,
+            lap=lap,
+        )
+
+        # Log repairs to dice logger
+        for result in repair_results:
+            if result.get("repaired", False):
+                self.dice_logger.log_roll(
+                    lap=lap,
+                    driver=result["driver"],
+                    incident_type="red_flag_repair",
+                    dice_type="d100",
+                    dice_result=result["dice_roll"],
+                    outcome="repaired"
+                    if result["fully_repaired"]
+                    else "partially_repaired",
+                    race_time=self.get_relative_time(),
+                    details={
+                        "damage_before": result["damage_before"],
+                        "damage_after": result["damage_after"],
+                        "actual_repair": result["actual_repair"],
+                        "damage_tier": result["damage_tier"],
+                    },
+                )
+
+                # Update driver damage state
+                driver = result["driver"]
+                if result["fully_repaired"]:
+                    # Remove damage if fully repaired
+                    if driver in self.race_state.driver_damage:
+                        del self.race_state.driver_damage[driver]
+                    # Also clear fault degradation
+                    if driver in self.race_state.driver_fault_degradation:
+                        self.race_state.driver_fault_degradation[driver] = 0.0
+                else:
+                    # Update damage amount
+                    if driver in self.race_state.driver_damage:
+                        self.race_state.driver_damage[driver]["total_damage"] = result[
+                            "damage_after"
+                        ]
+
+                # Print repair info
+                repair_msg = (
+                    f"  {driver}: Rolled {result['dice_roll']}/100, "
+                    f"repaired {result['actual_repair']:.1%} "
+                    f"({result['damage_before']:.1%} -> {result['damage_after']:.1%})"
+                )
+                if result["fully_repaired"]:
+                    repair_msg += " [FULLY REPAIRED]"
+                print(repair_msg)
+
+        # Print summary
+        if repair_results:
+            summary = repair_manager.get_repair_summary()
+            print(
+                f"\nRepair Summary: {summary['fully_repaired']} fully repaired, "
+                f"{summary['partially_repaired']} partially repaired "
+                f"(avg roll: {summary['average_dice_roll']})"
+            )
+        else:
+            print("  No cars required repairs")
+
+        return repair_results
+
     def apply_safety_car_effects(self, lap_times: Dict[str, float]) -> Dict[str, float]:
         """Apply safety car effects to lap times (typically slows everyone down)."""
         if self.race_state.sc_active:
@@ -2647,6 +2822,9 @@ class EnhancedRaceSimulator:
         # Check for pit stop
         pit_time = 0.0
         new_tyre = current_tyre
+        front_wing_replacement_time = 0.0
+        front_wing_replaced = False
+
         if lap in pit_laps:
             tire_change_time = roll_pit_stop_time()
             track_pit_time = 25.0  # Default
@@ -2665,6 +2843,52 @@ class EnhancedRaceSimulator:
 
             pit_time = track_pit_time + tire_change_time
 
+            # Check for front wing replacement
+            front_wing_result = self.front_wing_manager.attempt_replacement(driver, lap)
+
+            if front_wing_result.replaced:
+                front_wing_replacement_time = front_wing_result.total_time
+                front_wing_replaced = True
+                pit_time += front_wing_replacement_time
+
+                # Log front wing replacement decision (first dice roll)
+                self.dice_logger.log_roll(
+                    lap=lap,
+                    driver=driver,
+                    incident_type="front_wing_replacement",
+                    dice_type="d10",
+                    dice_result=front_wing_result.d10_roll,
+                    outcome="replaced",
+                    race_time=self.get_relative_time(),
+                    details={
+                        "severity": front_wing_result.severity.value,
+                        "threshold": front_wing_result.threshold,
+                        "extra_time": round(front_wing_replacement_time, 2),
+                    },
+                )
+
+                # Also sync with race_state front_wing_damage
+                if driver in self.race_state.front_wing_damage:
+                    self.race_state.front_wing_damage[driver]["replaced"] = True
+                    self.race_state.front_wing_damage[driver]["replacement_lap"] = lap
+            elif (
+                front_wing_result.severity.value != "minor"
+            ):  # Log skipped replacement for moderate+
+                self.dice_logger.log_roll(
+                    lap=lap,
+                    driver=driver,
+                    incident_type="front_wing_replacement",
+                    dice_type="d10",
+                    dice_result=front_wing_result.d10_roll,
+                    outcome="skipped",
+                    race_time=self.get_relative_time(),
+                    details={
+                        "severity": front_wing_result.severity.value,
+                        "threshold": front_wing_result.threshold,
+                        "reason": "roll_below_threshold",
+                    },
+                )
+
             # Determine new tyre
             if current_tyre_index + 1 < len(tyre_sequence):
                 new_tyre = tyre_sequence[current_tyre_index + 1]
@@ -2681,6 +2905,10 @@ class EnhancedRaceSimulator:
                     "pit_time": pit_time,
                     "track_pit_time": track_pit_time,
                     "new_tyre": new_tyre,
+                    "front_wing_replaced": front_wing_replaced,
+                    "front_wing_time": round(front_wing_replacement_time, 2)
+                    if front_wing_replaced
+                    else 0.0,
                 },
             )
 
@@ -3764,6 +3992,71 @@ def save_race_results(
     print(f"Race results saved to: {filepath}")
 
 
+def save_lap_times_to_csv(
+    results: Dict[str, Dict],
+    track_name: str,
+    output_dir: str,
+) -> None:
+    """
+    Save per-lap times to CSV for fastest lap calculation.
+
+    Args:
+        results: Dictionary with driver results containing lap_times
+        track_name: Track name for filename
+        output_dir: Output directory
+    """
+    rows = []
+    max_laps = max(len(r["lap_times"]) for r in results.values())
+
+    for driver, result in results.items():
+        lap_times = result["lap_times"]
+        fastest = min(lap_times) if lap_times else 0
+        fastest_idx = lap_times.index(fastest) + 1 if lap_times else 0
+
+        row = {
+            "driver": driver,
+            "fastest_lap": round(fastest, 3),
+            "fastest_lap_num": fastest_idx,
+        }
+
+        # Add each lap time
+        for i, lt in enumerate(lap_times, 1):
+            row[f"lap_{i}"] = round(lt, 3)
+
+        # Pad missing laps with empty strings
+        for i in range(len(lap_times) + 1, max_laps + 1):
+            row[f"lap_{i}"] = ""
+
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    filepath = os.path.join(output_dir, f"lap_times_{track_name.lower()}.csv")
+    df.to_csv(filepath, index=False)
+    print(f"Lap times saved to: {filepath}")
+
+
+def calculate_fastest_laps(results: Dict[str, Dict]) -> List[Dict]:
+    """
+    Calculate and rank fastest laps for all drivers.
+
+    Returns:
+        List of dicts: [{driver, fastest_lap, lap_number}, ...]
+        Sorted by fastest_lap (ascending)
+    """
+    fastest_laps = []
+
+    for driver, result in results.items():
+        lap_times = result.get("lap_times", [])
+        if lap_times:
+            fastest = min(lap_times)
+            lap_num = lap_times.index(fastest) + 1
+            fastest_laps.append(
+                {"driver": driver, "fastest_lap": fastest, "lap_number": lap_num}
+            )
+
+    return sorted(fastest_laps, key=lambda x: x["fastest_lap"])
+
+
 # =============================================================================
 # MAIN FUNCTION
 # =============================================================================
@@ -3950,6 +4243,13 @@ def main(argv=None):
         retirement_reasons,
     )
     dice_logger.save_to_csv(race_output_dir)
+
+    # Save lap times for fastest lap calculation
+    save_lap_times_to_csv(
+        results=results,
+        track_name=gp_name,
+        output_dir=race_output_dir,
+    )
 
     # Generate markdown report (Fix 3)
     try:

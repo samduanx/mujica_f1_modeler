@@ -37,6 +37,39 @@ The system is created **almost entirely by vibe coding techniques**, therefore r
 python main.py --gp-name 大奖赛名称
 ````
 
+### 控制脚本
+
+项目提供了多个控制脚本用于运行模拟：
+
+#### Windows 脚本
+
+PowerShell 脚本 (`scripts/run_with_assist.ps1`)：
+
+````
+.\scripts\run_with_assist.ps1 [-Intensity subtle|moderate|strong] [-TargetTeam "车队名称"]
+````
+
+批处理脚本 (`scripts/run_with_assist.bat`)：
+
+````
+scripts\run_with_assist.bat [intensity] [target_team]
+````
+
+#### 可用环境变量
+
+以下环境变量可与脚本配合使用：
+
+| 环境变量 | 可选值 |
+|---------|--------|
+| F1_NARRATIVE_ASSIST | subtle, moderate, strong |
+| F1_ASSIST_TARGET | 车队名称 |
+
+#### 测试脚本
+
+````
+python scripts/test_narrative_assist.py
+````
+
 ## TODO
 - [x] 基本模型 | Basic features
   - [x] 基本圈速模拟与车手差异构建 | Basic laptime simulations and driver differention modeling
@@ -46,7 +79,7 @@ python main.py --gp-name 大奖赛名称
   - [x] DR, PR计算系统 | Calculation system of DR and PR parameters
     - [ ] 车队升级机制移植 | Porting the current team/vehicle upgrades
     - [ ] 车手技能提升机制移植 | Porting the current driver upgrades
-- [ ] 自由练习 | Free Practice sessions
+- [x] 自由练习 | Free Practice sessions
 - [x] 排位赛（含冲刺排位） | Qualifying sessions (incl. Sprint Qualifiers)
 - [x] 冲刺赛 | Sprint sessions
   - [x] 冲刺赛结果接口（与排位赛共用）| Connector to pass sprint race results (and Q results)
@@ -70,7 +103,7 @@ python main.py --gp-name 大奖赛名称
     - [ ] 提取比赛信息 | Extracting race info
   - [ ] 预算帽计算方法移植 | Porting the cost cap system
   - [ ] 套件更换与处罚计算 | Modeling of sanctioned part replacements and related penalties
-  - [ ] 数据分析图标 | Tables and Graphs for data analysing
+  - [ ] 数据分析图表 | Tables and Graphs for data analysing
 - Bonus
   - [ ] 改造骰点系统使其成为可联网网上桌游 | Make it a online board game
 

@@ -36,9 +36,24 @@ class StrategistDiceRoller:
             strategist: The StrategistProfile to use for decisions
         """
         self.strategist = strategist
+        self._balancer = None
+        
+        # Initialize narrative assistance if enabled
+        try:
+            from src.core.narrative_assist import ProbabilityBalancer
+            self._balancer = ProbabilityBalancer()
+        except ImportError:
+            pass
 
     def roll_d20(self) -> int:
-        """Roll a 20-sided die."""
+        """
+        Roll a 20-sided die.
+        
+        If narrative assistance is enabled and this is the target team,
+        applies weighted probability balancing for more favorable outcomes.
+        """
+        if self._balancer:
+            return self._balancer.generate_weighted_d20(self.strategist.team)
         return random.randint(1, 20)
 
     def roll_d10(self) -> int:
