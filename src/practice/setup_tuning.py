@@ -145,19 +145,19 @@ class SetupDiceRoller:
 
         return self.roll_d6()
 
-    def roll_all_categories(self, driver: str) -> Dict[SetupCategory, int]:
+    def roll_all_categories(self, driver: Optional[str] = None) -> Dict[SetupCategory, int]:
         """
         Roll dice for all setup categories.
 
         Args:
-            driver: Driver name for tracking best results
+            driver: Optional driver name for tracking best results
 
         Returns:
             Dictionary mapping categories to roll results
         """
         results = {}
         for category in SetupCategory:
-            results[category] = self.roll_setup_category(category, driver)
+            results[category] = self.roll_setup_category(category, driver or "")
         return results
 
     def roll_for_driver(self, driver: str) -> Dict[SetupCategory, int]:

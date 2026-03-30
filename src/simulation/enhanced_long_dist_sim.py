@@ -16,6 +16,9 @@ Usage:
 import argparse
 import sys
 import os
+import json
+import glob
+import math
 
 # Handle PYTHONPATH for module imports
 # The project uses 'incidents' and 'drs' as top-level module names within src/
@@ -32,14 +35,20 @@ if _env_pythonpath:
 
 import fastf1
 import pandas as pd
+import matplotlib
+
+# Force non-interactive backend to avoid GUI windows interrupting simulation runs.
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import random
 import csv
+from bisect import bisect_right
 from collections import defaultdict, deque
 import traceback
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
+from dataclasses import dataclass, field
 
 # Rating compensation functions (embedded to avoid import issues)
 # These are duplicated from core/rating_compensator.py
@@ -52,6 +61,13 @@ TEAM_TIERS = {
     },
     "MID": {"teams": {"alpine", "williams"}, "max_compensation": 0.25},
     "BACK": {"teams": {"alphatauri", "alfa_romeo", "haas"}, "max_compensation": 0.15},
+}
+
+FERRARI_NARRATIVE_MODE = True
+_FERRARI_NARRATIVE_CACHE: Dict[str, Tuple[float, float]] = {}
+
+STRATEGIST_TEAM_ALIASES = {
+    "Red Bull": "Red Bull Racing",
 }
 
 
@@ -223,6 +239,7 @@ from src.strategist import (
     DriverComplianceLevel,
     PaceMode,
     get_manager,
+    get_track_rules,
 )
 from src.strategist.integrators.race_sim_integration import (
     StrategistIntegration,
@@ -236,6 +253,7 @@ from src.skills import (
     WeatherCondition,
     get_skill_manager,
 )
+from src.core.narrative_assist import NarrativeAssistConfig, ProbabilityBalancer
 
 # =============================================================================
 # STUB IMPLEMENTATIONS FOR MIGRATED FUNCTIONS
@@ -443,8 +461,160 @@ def generate_individual_tyre_sequence(compounds: list) -> list:
 
 
 def determine_pit_strategy(track_name: str, pit_data: dict) -> int:
-    """Determine pit strategy (number of stops)."""
-    return 1
+    """Determine pit strategy (number of stops) via initial dice control.
+
+    Default baseline:
+    - 1 stop: 50%
+    - 2 stops: 50%
+
+    Ferrari narrative mode:
+    - Uses historical simulation outcomes to bias 1/2-stop split toward
+      the strategy with the highest observed win likelihood.
+    """
+    return determine_pit_strategy_with_feedback(track_name, pit_data)
+
+
+def determine_pit_strategy_with_feedback(
+    track_name: str,
+    pit_data: dict,
+    team: Optional[str] = None,
+) -> int:
+    one_stop_weight = 0.5
+    two_stop_weight = 0.5
+    config = NarrativeAssistConfig.get_config()
+    balancer = ProbabilityBalancer()
+
+    if team:
+        one_stop_weight, two_stop_weight = get_team_narrative_weights(track_name, team)
+    elif FERRARI_NARRATIVE_MODE:
+        one_stop_weight, two_stop_weight = get_ferrari_narrative_weights(track_name)
+
+    if config.enabled and team:
+        one_stop_weight, two_stop_weight = balancer.shape_strategy_weights(
+            team, one_stop_weight, two_stop_weight
+        )
+
+        preferred_strategy = 1 if one_stop_weight >= two_stop_weight else 2
+
+        if config.is_ultra() and config.strategy_lock:
+            return preferred_strategy
+
+        strategy_bias = config.strategy_bias
+
+        if config.is_target_team(team):
+            force_optimal_prob = min(0.92, 0.55 + strategy_bias * 0.55)
+            if random.random() < force_optimal_prob:
+                return preferred_strategy
+        else:
+            force_suboptimal_prob = min(0.75, 0.18 + config.opponent_debuff * 1.1)
+            if random.random() < force_suboptimal_prob:
+                return 2 if preferred_strategy == 1 else 1
+
+    roll = roll_d100()
+    threshold = int(round(one_stop_weight * 100))
+    return 1 if roll <= threshold else 2
+
+
+def get_team_narrative_weights(track_name: str, team_name: str) -> Tuple[float, float]:
+    """Build team strategy weights from historical outputs using smoothed score model."""
+    config = NarrativeAssistConfig.get_config()
+    cache_key = f"{track_name.lower()}::{team_name.lower()}"
+    if cache_key in _FERRARI_NARRATIVE_CACHE:
+        return _FERRARI_NARRATIVE_CACHE[cache_key]
+
+    base_dir = "outputs"
+    track_token = track_name.lower()
+    race_weekend_pattern = os.path.join(
+        base_dir,
+        "race_weekend",
+        f"{track_name}_*",
+        "race",
+        f"race_results_{track_token}.csv",
+    )
+    enhanced_pattern = os.path.join(
+        base_dir,
+        "enhanced_sim",
+        f"{track_name}_*",
+        f"race_results_{track_token}.csv",
+    )
+
+    files = glob.glob(race_weekend_pattern) + glob.glob(enhanced_pattern)
+    files = list(dict.fromkeys(files))
+
+    score_sum_by_stops = {1: 0.0, 2: 0.0}
+    samples_by_stops = {1: 0, 2: 0}
+
+    for filepath in files:
+        try:
+            df = pd.read_csv(filepath)
+        except Exception:
+            continue
+
+        if "team" not in df.columns or "num_pits" not in df.columns:
+            continue
+
+        rows = df[df["team"].astype(str).str.lower() == team_name.lower()]
+        for _, row in rows.iterrows():
+            try:
+                stops = int(str(row.get("num_pits", -1)))
+                position = int(str(row.get("position", 99)))
+            except Exception:
+                continue
+
+            if stops not in (1, 2):
+                continue
+
+            base_score = max(0, 26 - position)
+            podium_bonus = 0
+            if position == 1:
+                podium_bonus = 12
+            elif position == 2:
+                podium_bonus = 8
+            elif position == 3:
+                podium_bonus = 6
+            elif position <= 10:
+                podium_bonus = 2
+
+            score_sum_by_stops[stops] += float(base_score + podium_bonus)
+            samples_by_stops[stops] += 1
+
+    total_samples = samples_by_stops[1] + samples_by_stops[2]
+    if total_samples < 8:
+        if config.is_ultra() and config.is_target_team(team_name):
+            _FERRARI_NARRATIVE_CACHE[cache_key] = (0.82, 0.18)
+            return (0.82, 0.18)
+        _FERRARI_NARRATIVE_CACHE[cache_key] = (0.5, 0.5)
+        return (0.5, 0.5)
+
+    ultra_mode = config.is_ultra()
+    prior_samples = 2.0 if ultra_mode else 3.0
+    prior_score = 15.5 if ultra_mode else 14.0
+    mean1 = (score_sum_by_stops[1] + prior_score * prior_samples) / (
+        samples_by_stops[1] + prior_samples
+    )
+    mean2 = (score_sum_by_stops[2] + prior_score * prior_samples) / (
+        samples_by_stops[2] + prior_samples
+    )
+
+    beta = 0.22 if ultra_mode else 0.14
+    p1 = math.exp(beta * mean1)
+    p2 = math.exp(beta * mean2)
+    norm = max(1e-9, p1 + p2)
+    one_stop_weight = p1 / norm
+
+    if ultra_mode:
+        one_stop_weight = max(0.08, min(0.92, one_stop_weight))
+    else:
+        one_stop_weight = max(0.12, min(0.88, one_stop_weight))
+    two_stop_weight = 1.0 - one_stop_weight
+
+    _FERRARI_NARRATIVE_CACHE[cache_key] = (one_stop_weight, two_stop_weight)
+    return (one_stop_weight, two_stop_weight)
+
+
+def get_ferrari_narrative_weights(track_name: str) -> Tuple[float, float]:
+    """Build Ferrari narrative strategy weights from historical simulation outputs."""
+    return get_team_narrative_weights(track_name, "Ferrari")
 
 
 def roll_tyre_for_track(track_name: str) -> str:
@@ -589,6 +759,9 @@ def calculate_dr_based_std(
     base_std: float = 0.08,
     previous_bias: float = 0.0,
     markov_factor: float = 0.6,
+    team_pr: Optional[float] = None,
+    pr_min: Optional[float] = None,
+    pr_max: Optional[float] = None,
 ) -> Tuple[float, float]:
     """
     Calculate noise standard deviation based on DR (driver stability).
@@ -622,8 +795,21 @@ def calculate_dr_based_std(
     else:  # Bottom 40% - variable consistency
         effective_base = 0.04 + (0.4 - dr_normalized) * 0.133  # 0.04-0.08s
 
+    # PR-sensitive intra-session variability:
+    # lower-PR cars tend to be less stable lap-to-lap, but keep changes moderate.
+    if (
+        team_pr is not None
+        and pr_min is not None
+        and pr_max is not None
+        and pr_max > pr_min
+    ):
+        pr_normalized = (team_pr - pr_min) / (pr_max - pr_min)
+        # Top PR: ~0.92x variance, Low PR: ~1.18x variance
+        pr_variance_factor = 1.18 - 0.26 * pr_normalized
+        effective_base *= pr_variance_factor
+
     # Cap at reasonable limits
-    effective_base = max(0.005, min(effective_base, 0.08))
+    effective_base = max(0.006, min(effective_base, 0.11))
 
     # Markov process: bias carries over from previous lap
     # Driver's "form" persists - consistent drivers maintain form better
@@ -679,57 +865,152 @@ def generate_team_tyre_compounds(track_name: str, strategy: int) -> list:
 
 
 def get_universal_tyre_params_with_cliff():
-    """Get tire parameters based on Pirelli technical documentation."""
-    return {
+    """Get tire parameters with optional FastF1/Pirelli-informed calibration."""
+    defaults = {
         "C1": {
-            "base_lap": 30,
-            "base_degradation": 0.025,
-            "cliff_lap": 28,
-            "cliff_severity": 0.15,
+            "base_lap": 29,
+            "base_degradation": 0.028,
+            "cliff_lap": 30,
+            "cliff_severity": 0.14,
         },
         "C2": {
-            "base_lap": 25,
-            "base_degradation": 0.030,
-            "cliff_lap": 23,
-            "cliff_severity": 0.12,
+            "base_lap": 24,
+            "base_degradation": 0.032,
+            "cliff_lap": 24,
+            "cliff_severity": 0.15,
         },
         "C3": {
             "base_lap": 20,
-            "base_degradation": 0.035,
-            "cliff_lap": 18,
-            "cliff_severity": 0.10,
+            "base_degradation": 0.036,
+            "cliff_lap": 19,
+            "cliff_severity": 0.16,
         },
         "C4": {
-            "base_lap": 15,
-            "base_degradation": 0.045,
-            "cliff_lap": 13,
-            "cliff_severity": 0.08,
+            "base_lap": 16,
+            "base_degradation": 0.041,
+            "cliff_lap": 15,
+            "cliff_severity": 0.17,
         },
         "C5": {
-            "base_lap": 12,
-            "base_degradation": 0.060,
-            "cliff_lap": 10,
-            "cliff_severity": 0.06,
+            "base_lap": 13,
+            "base_degradation": 0.046,
+            "cliff_lap": 13,
+            "cliff_severity": 0.19,
         },
         # Also support compound names
         "SOFT": {
-            "base_lap": 15,
-            "base_degradation": 0.045,
-            "cliff_lap": 13,
-            "cliff_severity": 0.08,
+            "base_lap": 16,
+            "base_degradation": 0.041,
+            "cliff_lap": 15,
+            "cliff_severity": 0.17,
         },
         "MEDIUM": {
             "base_lap": 20,
-            "base_degradation": 0.035,
-            "cliff_lap": 18,
-            "cliff_severity": 0.10,
+            "base_degradation": 0.036,
+            "cliff_lap": 19,
+            "cliff_severity": 0.16,
         },
         "HARD": {
-            "base_lap": 25,
-            "base_degradation": 0.030,
-            "cliff_lap": 23,
-            "cliff_severity": 0.12,
+            "base_lap": 24,
+            "base_degradation": 0.032,
+            "cliff_lap": 24,
+            "cliff_severity": 0.15,
         },
+    }
+
+    calibration_path = os.path.join("data", "tyre_fastf1_calibration.json")
+    if not os.path.exists(calibration_path):
+        return defaults
+
+    try:
+        with open(calibration_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        calibrated = payload.get("tyre_params", {})
+        for compound, values in calibrated.items():
+            if compound not in defaults or not isinstance(values, dict):
+                continue
+            for key in ["base_lap", "base_degradation", "cliff_lap", "cliff_severity"]:
+                if key in values:
+                    defaults[compound][key] = values[key]
+    except Exception:
+        return defaults
+
+    return defaults
+
+
+def get_tyre_pace_delta_seconds(tyre_compound: str) -> float:
+    """Return compound pace offset in seconds (negative = faster)."""
+    defaults = {
+        "HARD": 0.26,
+        "MEDIUM": 0.0,
+        "SOFT": -0.34,
+        "C1": 0.42,
+        "C2": 0.24,
+        "C3": 0.0,
+        "C4": -0.22,
+        "C5": -0.44,
+    }
+
+    calibration_path = os.path.join("data", "tyre_fastf1_calibration.json")
+    if os.path.exists(calibration_path):
+        try:
+            with open(calibration_path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            calibrated = payload.get("pace_delta_seconds", {})
+            if isinstance(calibrated, dict):
+                defaults.update(calibrated)
+        except Exception:
+            pass
+
+    return float(defaults.get(tyre_compound.upper(), defaults["MEDIUM"]))
+
+
+def roll_driver_error_impact() -> Dict[str, Any]:
+    """Roll driver-error impact with strong skew toward very small mistakes."""
+    roll = roll_d100()
+
+    if roll == 1:
+        # Single major failure bucket (>1s), very rare
+        return {
+            "impact_class": "major_failure",
+            "time_loss": round(random.uniform(1.1, 2.3), 3),
+            "error_type": "wall_brush" if roll_d10() <= 4 else "major_lockup",
+            "damage_severity": "major",
+            "major_failure": True,
+            "dice": roll,
+        }
+
+    if roll <= 10:
+        # Larger but still bounded error: 0.25-0.50s
+        return {
+            "impact_class": "large_error",
+            "time_loss": round(random.uniform(0.25, 0.5), 3),
+            "error_type": "lockup" if roll_d6() <= 3 else "wide_line",
+            "damage_severity": "moderate",
+            "major_failure": False,
+            "dice": roll,
+        }
+
+    if roll <= 30:
+        # Small/moderate: 0.10-0.25s
+        return {
+            "impact_class": "small_error",
+            "time_loss": round(random.uniform(0.1, 0.25), 3),
+            "error_type": "minor_lockup" if roll_d6() <= 3 else "momentum_loss",
+            "damage_severity": "minor",
+            "major_failure": False,
+            "dice": roll,
+        }
+
+    # Dominant bucket: tiny errors (<0.1s)
+    return {
+        "impact_class": "micro_error",
+        "time_loss": round(random.uniform(0.02, 0.09), 3),
+        "error_type": "small_correction",
+        "damage_severity": "minor",
+        "major_failure": False,
+        "dice": roll,
     }
 
 
@@ -1289,6 +1570,8 @@ def calculate_driver_error_probability(
     position: int,
     is_fighting: bool = False,
     is_leading: bool = False,
+    r_value: Optional[float] = None,
+    team_pr: Optional[float] = None,
 ) -> float:
     """
     Calculate driver error probability based on personality and position.
@@ -1304,8 +1587,18 @@ def calculate_driver_error_probability(
     # Base error rate: 10 - error_in_clean_air (so higher error_in_clean_air = more errors)
     base_error_rate = personality["error_in_clean_air"]
 
-    # Convert to probability (0-20% range)
-    error_prob = base_error_rate * 2.0  # 2-20% range
+    # Convert to probability (moderately reduced baseline)
+    error_prob = base_error_rate * 1.7  # ~1.7-17% baseline range
+
+    # Better overall package (higher R) should reduce mistakes
+    if r_value is not None:
+        r_norm = max(0.0, min(1.0, (r_value - 250.0) / 100.0))
+        error_prob *= 1.0 - (0.18 * r_norm)
+
+    # Higher team level (PR) should further reduce mistakes
+    if team_pr is not None:
+        pr_norm = max(0.0, min(1.0, (team_pr - 290.0) / 25.0))
+        error_prob *= 1.0 - (0.12 * pr_norm)
 
     # Aggression multiplier when fighting
     if is_fighting:
@@ -1328,7 +1621,141 @@ def calculate_driver_error_probability(
         error_prob += 0.5  # May take more risks
 
     # Clamp to reasonable range
-    return max(1.0, min(25.0, error_prob))
+    return max(0.8, min(22.0, error_prob))
+
+
+# =============================================================================
+# REAL-TIME LAPPING DETECTOR
+# =============================================================================
+
+
+@dataclass
+class LappingEvent:
+    """Event representing a lapping occurrence."""
+
+    leader: str  # Driver doing the lapping
+    lapped_driver: str  # Driver being lapped
+    lap: int  # Lap when lapping occurred
+    laps_down: int  # Number of laps down
+    time_gap: float  # Time gap between drivers
+    avg_lap_time: float  # Average lap time for reference
+
+
+class RealTimeLappingDetector:
+    """
+    Real-time lapping detector following FIA regulations.
+
+    FIA Rules:
+    - A driver is lapped when the leader completes a full lap more than them
+    - Lapped cars must not interfere with leading cars
+    - At race end, lapped cars are ranked behind all cars that completed more laps
+    """
+
+    def __init__(self, base_lap_time: float = 90.0):
+        self.base_lap_time = base_lap_time
+        self.lapping_history: List[LappingEvent] = []
+        self.driver_laps_down: Dict[str, int] = {}  # driver -> laps down
+
+    def detect_lapping(
+        self,
+        results: Dict[str, Dict],
+        current_lap: int,
+        safety_car_active: bool = False,
+    ) -> List[LappingEvent]:
+        """
+        Detect lapping situations in real-time.
+
+        Args:
+            results: Dictionary of driver results with cumulative_time and laps_completed
+            current_lap: Current lap number
+            safety_car_active: Whether safety car is currently active
+
+        Returns:
+            List of LappingEvent for any new lapping situations
+        """
+        events = []
+
+        # Skip lapping detection during safety car (per FIA rules)
+        if safety_car_active:
+            return events
+
+        if not results:
+            return events
+
+        # Find the current leader (most laps completed, then lowest cumulative time)
+        active_results = {
+            d: r for d, r in results.items() if r.get("laps_completed", 0) > 0
+        }
+
+        if not active_results:
+            return events
+
+        # Find leader: most laps completed, then lowest cumulative time
+        leader = min(
+            active_results.items(),
+            key=lambda x: (-x[1]["laps_completed"], x[1]["cumulative_time"]),
+        )[0]
+
+        leader_result = active_results[leader]
+        leader_laps = leader_result["laps_completed"]
+        leader_time = leader_result["cumulative_time"]
+
+        # Calculate average lap time from leader
+        avg_lap_time = (
+            leader_time / leader_laps if leader_laps > 0 else self.base_lap_time
+        )
+
+        # Check each driver for lapping
+        for driver, result in active_results.items():
+            if driver == leader:
+                continue
+
+            driver_laps = result["laps_completed"]
+            driver_time = result["cumulative_time"]
+
+            # Calculate time gap
+            time_gap = driver_time - leader_time
+
+            # FIA-compliant lapping classification:
+            # A car is lapped when it has completed fewer laps than the leader.
+            # Time gap is metadata only and must not determine laps_down directly.
+            calculated_laps_down = max(0, leader_laps - driver_laps)
+
+            # Get previous laps down for this driver
+            previous_laps_down = self.driver_laps_down.get(driver, 0)
+
+            # Check if this is a new lapping or increased laps down
+            if calculated_laps_down > previous_laps_down:
+                # New lapping event detected
+                event = LappingEvent(
+                    leader=leader,
+                    lapped_driver=driver,
+                    lap=current_lap,
+                    laps_down=calculated_laps_down,
+                    time_gap=time_gap,
+                    avg_lap_time=avg_lap_time,
+                )
+                events.append(event)
+                self.driver_laps_down[driver] = calculated_laps_down
+
+        return events
+
+    def get_laps_down(self, driver: str) -> int:
+        """Get the number of laps a driver is down."""
+        return self.driver_laps_down.get(driver, 0)
+
+    def is_lapped(self, driver: str) -> bool:
+        """Check if a driver has been lapped."""
+        return self.driver_laps_down.get(driver, 0) > 0
+
+    def get_effective_laps(self, driver: str, actual_laps: int) -> int:
+        """
+        Calculate effective laps for classification.
+
+        FIA rule: Lapped cars are classified with reduced lap counts.
+        """
+        laps_down = self.driver_laps_down.get(driver, 0)
+        return max(0, actual_laps - laps_down)
 
 
 # =============================================================================
@@ -1361,6 +1788,8 @@ class RaceState:
         self.red_flag_active = False
         self.vsc_laps_remaining = 0
         self.sc_laps_remaining = 0
+        self.vsc_activation_lap: Optional[int] = None
+        self.sc_activation_lap: Optional[int] = None
 
         # Incident tracking
         self.active_incidents: List[Dict] = []
@@ -1405,6 +1834,15 @@ class RaceState:
         self.last_weather_pit_decision: Dict[
             str, int
         ] = {}  # driver -> lap of last weather pit
+        self.weather_pits_count: Dict[
+            str, int
+        ] = {}  # driver -> number of weather-triggered pit stops
+        self.weather_pit_cooldown_laps: int = 8  # Minimum laps between weather pits
+        self.max_weather_pits_per_race: int = (
+            3  # Maximum weather-related pit stops per race
+        )
+        self.track_water_level: float = 0.0  # 0.0 (dry) -> 1.0 (flooded)
+        self.track_water_history: List[Dict[str, Any]] = []
 
         # WEATHER VSC/SC TRACKING - Fix: track if weather VSC/SC has already been triggered
         # This prevents multiple triggers for the same weather event
@@ -1499,6 +1937,31 @@ class EnhancedRaceSimulator:
         self.pit_data = pit_data
         self.track_chars = track_chars
         self.dice_logger = dice_logger
+        self.narrative_config = NarrativeAssistConfig.get_config()
+        self.narrative_balancer = ProbabilityBalancer()
+
+        # Runtime narrative scaling (keeps intensity-respecting bounds)
+        intensity = self.narrative_config.intensity or ""
+        self._target_pace_boost = {
+            "subtle": 0.0015,
+            "moderate": 0.0032,
+            "strong": 0.0052,
+        }.get(intensity, 0.0)
+        self._opponent_pace_penalty = {
+            "subtle": 0.0009,
+            "moderate": 0.0020,
+            "strong": 0.0036,
+        }.get(intensity, 0.0)
+        self._target_pit_bonus_sec = {
+            "subtle": 0.35,
+            "moderate": 0.75,
+            "strong": 1.25,
+        }.get(intensity, 0.0)
+        self._opponent_pit_penalty_sec = {
+            "subtle": 0.15,
+            "moderate": 0.35,
+            "strong": 0.65,
+        }.get(intensity, 0.0)
 
         # Set random seed if specified
         if random_seed is not None:
@@ -1531,6 +1994,11 @@ class EnhancedRaceSimulator:
         # Initialize blue flag manager
         self.blue_flag_manager = BlueFlagManager(config=LappingDetectionConfig())
 
+        # Initialize real-time lapping detector (FIA-compliant)
+        self.lapping_detector = RealTimeLappingDetector(
+            base_lap_time=self.base_lap_time
+        )
+
         # Initialize unlapping manager
         self.unlapping_manager = UnlappingManager()
 
@@ -1558,10 +2026,14 @@ class EnhancedRaceSimulator:
         self.simulation_start_time: Optional[datetime] = None
 
         # Vehicle fault check scheduling - dice roll determines next check lap
-        # Initial check at lap 3, then dice determines next check interval
-        self._next_vehicle_fault_check_lap: int = 3
-        # Driver error check interval - check every 3-5 laps to avoid excessive errors
-        self._next_driver_error_check_lap: int = 3
+        # Initial check at lap 3, then per-driver dice determines next check interval
+        self._next_vehicle_fault_check_lap_by_driver: Dict[str, int] = {
+            driver: 3 for driver in self.driver_data.keys()
+        }
+        # Driver error check interval - per driver to avoid order bias in loop
+        self._next_driver_error_check_lap_by_driver: Dict[str, int] = {
+            driver: 3 for driver in self.driver_data.keys()
+        }
 
         # =======================================================================
         # STRATEGIST SYSTEM INTEGRATION
@@ -1594,8 +2066,9 @@ class EnhancedRaceSimulator:
         for team in set(self.driver_teams.values()):
             if team and team != "Unknown":
                 try:
+                    strategist_team = STRATEGIST_TEAM_ALIASES.get(team, team)
                     self.team_strategist_integrations[team] = StrategistIntegration(
-                        team=team,
+                        team=strategist_team,
                         seed=random_seed,
                     )
                     self.team_last_pit_decision_lap[team] = 0
@@ -1689,7 +2162,10 @@ class EnhancedRaceSimulator:
                 # Find driver ahead and behind
                 sorted_drivers = sorted(
                     results.items(),
-                    key=lambda x: x[1].get("cumulative_time", float("inf")),
+                    key=lambda x: (
+                        -x[1].get("laps_completed", 0),
+                        x[1].get("cumulative_time", float("inf")),
+                    ),
                 )
                 for idx, (d, r) in enumerate(sorted_drivers):
                     if d == driver:
@@ -1808,9 +2284,9 @@ class EnhancedRaceSimulator:
         Returns:
             Tuple of (initial_weather_state, weather_description)
         """
-        # Get track info for precipitation data
+        # Get track info for precipitation data (month + climate aware)
         track_info = get_track_info(self.track_name)
-        base_rain_chance = track_info.get("rain_chance", 0.25)  # Default 25%
+        base_rain_chance = self._calculate_starting_rain_chance(track_info)
 
         # Convert to percentage for dice roll (0-100)
         rain_threshold = int(base_rain_chance * 100)
@@ -1879,15 +2355,52 @@ class EnhancedRaceSimulator:
                 rain_intensity
             )
             initial_weather.track_condition = TrackCondition.WET
-            initial_weather.precipitation_probability = 80.0
+            initial_weather.precipitation_probability = max(15.0, base_rain_chance * 100)
         else:
             initial_weather.rain_intensity = RainIntensity.NONE
             initial_weather.track_condition = TrackCondition.DRY
-            initial_weather.precipitation_probability = 0.0
+            initial_weather.precipitation_probability = base_rain_chance * 100
 
         self.race_state.current_weather_state = initial_weather
+        self.race_state.track_water_level = {
+            RainIntensity.NONE: 0.02,
+            RainIntensity.LIGHT: 0.18,
+            RainIntensity.MODERATE: 0.35,
+            RainIntensity.HEAVY: 0.60,
+            RainIntensity.TORRENTIAL: 0.85,
+        }.get(initial_weather.rain_intensity, 0.02)
 
         return initial_weather, weather_desc
+
+    def _calculate_starting_rain_chance(self, track_info: Dict[str, Any]) -> float:
+        """Calculate effective starting rain chance with seasonal and climate adjustments."""
+        base_chance = float(track_info.get("rain_chance", 0.25))
+        climate = str(track_info.get("climate", "temperate")).lower()
+        rainy_months = track_info.get("rainy_months", []) or []
+
+        race_month = 5
+        race_date = track_info.get("date")
+        if isinstance(race_date, str):
+            try:
+                race_month = datetime.strptime(race_date, "%Y-%m-%d").month
+            except ValueError:
+                race_month = 5
+
+        # Baseline dampening for race-start weather to avoid over-triggering wet starts
+        chance = base_chance * 0.80
+
+        # Seasonal adjustment: mild up in rainy season, down otherwise
+        if race_month in rainy_months:
+            chance *= 1.08
+        else:
+            chance *= 0.82
+
+        # Mediterranean tracks are typically much drier in late spring/summer
+        if climate == "mediterranean" and race_month in [5, 6, 7, 8, 9]:
+            chance *= 0.50
+
+        # Clamp to realistic bounds for race-start probability
+        return max(0.005, min(0.45, chance))
 
     def _map_rain_to_weather_type(self, intensity: RainIntensity) -> WeatherType:
         """Map rain intensity to weather type."""
@@ -1992,6 +2505,191 @@ class EnhancedRaceSimulator:
             "rain_probability": current_weather.precipitation_probability,
         }
 
+    def _get_driver_current_tyre(self, driver_result: Dict[str, Any], lap: int) -> str:
+        """Get driver's current tyre compound at the start of this lap."""
+        pit_laps = driver_result.get("pit_laps", [])
+        tyre_sequence = driver_result.get("tyre_sequence", [])
+        if not tyre_sequence:
+            return "MEDIUM"
+
+        tyre_idx = sum(1 for pit_lap in pit_laps if pit_lap < lap)
+        if tyre_idx >= len(tyre_sequence):
+            tyre_idx = len(tyre_sequence) - 1
+        return tyre_sequence[tyre_idx]
+
+    def _apply_track_water_model(
+        self,
+        lap: int,
+        weather_effects: Dict[str, Any],
+        results: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """
+        Apply track water accumulation + sweeping model.
+
+        This models water build-up from rainfall and water clearing from drainage + cars
+        repeatedly running through the racing line (扫水 effect).
+        """
+        adjusted = dict(weather_effects)
+        rain_intensity = adjusted.get("rain_intensity", RainIntensity.NONE)
+
+        rain_input_per_lap = {
+            RainIntensity.NONE: 0.00,
+            RainIntensity.LIGHT: 0.040,
+            RainIntensity.MODERATE: 0.080,
+            RainIntensity.HEAVY: 0.140,
+            RainIntensity.TORRENTIAL: 0.220,
+        }.get(rain_intensity, 0.00)
+
+        active_drivers = [d for d in results if not self.race_state.is_dnf(d)]
+        dry_count = 0
+        intermediate_count = 0
+        wet_count = 0
+        for driver in active_drivers:
+            tyre = self._get_driver_current_tyre(results[driver], lap)
+            if tyre in {"SOFT", "MEDIUM", "HARD"}:
+                dry_count += 1
+            elif tyre == "INTERMEDIATE":
+                intermediate_count += 1
+            elif tyre == "WET":
+                wet_count += 1
+
+        natural_drainage = 0.015
+        sweeping = dry_count * 0.003 + intermediate_count * 0.002 + wet_count * 0.0015
+        if rain_intensity != RainIntensity.NONE:
+            sweeping *= 0.55
+
+        water_level = self.race_state.track_water_level
+        water_level += rain_input_per_lap
+        water_level -= natural_drainage
+        water_level -= sweeping
+        water_level = max(0.0, min(1.0, water_level))
+        self.race_state.track_water_level = water_level
+
+        if water_level < 0.08:
+            modeled_track = TrackCondition.DRY
+            modeled_recommended = "dry"
+        elif water_level < 0.22:
+            modeled_track = TrackCondition.DAMP
+            modeled_recommended = "intermediate"
+        elif water_level < 0.60:
+            modeled_track = TrackCondition.WET
+            modeled_recommended = "intermediate"
+        else:
+            modeled_track = TrackCondition.FLOODED
+            modeled_recommended = "wet"
+
+        # Hysteresis: avoid immediate flip-flop off rain tyres after one dry-ish lap
+        if modeled_recommended == "dry" and water_level >= 0.12:
+            modeled_recommended = "intermediate"
+
+        adjusted["track_condition"] = modeled_track
+        adjusted["recommended_tyre"] = modeled_recommended
+        adjusted["pit_for_weather"] = modeled_recommended != "dry"
+        adjusted["lap_time_modifier"] = adjusted.get("lap_time_modifier", 0.0) + (
+            0.06 * water_level
+        )
+
+        self.race_state.track_water_history.append(
+            {
+                "lap": lap,
+                "water_level": water_level,
+                "rain_intensity": getattr(rain_intensity, "name", str(rain_intensity)),
+                "track_condition": modeled_track.value,
+                "recommended_tyre": modeled_recommended,
+            }
+        )
+
+        return adjusted
+
+    def _apply_fia_final_classification(
+        self,
+        results: Dict[str, Dict[str, Any]],
+    ) -> List[Tuple[str, Dict[str, Any]]]:
+        """Apply FIA-style final classification using leader chequered time."""
+        if not results:
+            return []
+
+        # Leader = shortest cumulative race time among non-DNF cars
+        non_dnf = [
+            (driver, result)
+            for driver, result in results.items()
+            if not self.race_state.is_dnf(driver)
+        ]
+        if not non_dnf:
+            non_dnf = list(results.items())
+
+        leader_driver, leader_result = min(non_dnf, key=lambda item: item[1]["cumulative_time"])
+        leader_finish_time = float(leader_result["cumulative_time"])
+        leader_laps = int(leader_result.get("laps_completed", 0))
+
+        for driver, result in results.items():
+            lap_times = result.get("lap_times", [])
+            cumulative_checkpoints: List[float] = []
+            running = 0.0
+            for lap_time in lap_times:
+                running += float(lap_time)
+                cumulative_checkpoints.append(running)
+
+            laps_crossed_at_flag = bisect_right(
+                cumulative_checkpoints, leader_finish_time + 1e-9
+            )
+            actual_laps = int(result.get("laps_completed", len(cumulative_checkpoints)))
+            cumulative_time = float(result.get("cumulative_time", float("inf")))
+
+            # Estimate laps-at-flag from time delta vs representative lap time.
+            # This prevents near-finish same-lap cars (who cross just after the leader)
+            # from being incorrectly classified as +1 lap.
+            representative_window = [float(t) for t in lap_times[-5:] if float(t) > 0]
+            representative_lap = (
+                sum(representative_window) / len(representative_window)
+                if representative_window
+                else 90.0
+            )
+            time_after_flag = max(0.0, cumulative_time - leader_finish_time)
+            estimated_laps_behind = int(time_after_flag // max(1.0, representative_lap))
+            laps_estimated_at_flag = max(0, actual_laps - estimated_laps_behind)
+            laps_at_flag = max(laps_crossed_at_flag, laps_estimated_at_flag)
+
+            if driver == leader_driver:
+                laps_at_flag = leader_laps
+            elif self.race_state.is_dnf(driver):
+                laps_at_flag = min(laps_at_flag, actual_laps)
+
+            classification_time = (
+                cumulative_checkpoints[laps_at_flag - 1]
+                if laps_at_flag > 0 and laps_at_flag <= len(cumulative_checkpoints)
+                else float("inf")
+            )
+
+            laps_down = max(0, leader_laps - laps_at_flag)
+            result["actual_laps"] = actual_laps
+            result["effective_laps"] = laps_at_flag
+            result["laps_down"] = laps_down
+            result["is_lapped"] = laps_down > 0
+            result["classification_time"] = classification_time
+
+        final_results = sorted(
+            results.items(),
+            key=lambda item: (
+                -item[1].get("effective_laps", 0),
+                item[1].get("cumulative_time", float("inf")),
+                item[1].get("classification_time", float("inf")),
+            ),
+        )
+
+        # FIA-style interval: same-lap cars get time gap, lapped cars get lap deficit marker in print.
+        leader_total_time = float(final_results[0][1].get("cumulative_time", 0.0))
+        for position, (driver, result) in enumerate(final_results, 1):
+            result["position"] = position
+            if position == 1:
+                result["interval"] = 0.0
+            elif result.get("effective_laps", 0) == leader_laps:
+                result["interval"] = float(result.get("cumulative_time", 0.0)) - leader_total_time
+            else:
+                result["interval"] = float("nan")
+
+        return final_results
+
     def _is_drs_enabled_in_weather(self, weather: Any) -> bool:
         """
         Determine if DRS should be enabled based on weather conditions.
@@ -2087,6 +2785,11 @@ class EnhancedRaceSimulator:
         """
         Determine if a driver should pit for weather-related tyre change.
 
+        Implements improved weather pit stop restrictions:
+        - Cooldown period between weather pits (default 5 laps)
+        - Maximum weather pits per race (default 3)
+        - Track-specific rules for Monaco/Singapore
+
         Args:
             driver: Driver name
             lap: Current lap
@@ -2099,27 +2802,154 @@ class EnhancedRaceSimulator:
         recommended_tyre = weather_effects.get("recommended_tyre", "dry")
         track_condition = weather_effects.get("track_condition", TrackCondition.DRY)
 
-        # Check if driver already pitted recently for weather
-        last_pit = self.race_state.last_weather_pit_decision.get(driver, 0)
-        if lap - last_pit < 3:  # Don't pit again within 3 laps
+        # Check track-specific rules for Monaco/Singapore
+        track_rules = get_track_rules(self.track_name)
+        team = self.driver_teams.get(driver, "")
+        is_target = self.narrative_config.enabled and self.narrative_config.is_target_team(team)
+        is_opponent = self.narrative_config.enabled and team and not is_target
+        weather_pits_done = self.race_state.weather_pits_count.get(driver, 0)
+        last_pit_lap = self.race_state.last_weather_pit_decision.get(driver, 0)
+        laps_since_last_pit = lap - last_pit_lap
+
+        # Skip if already on suitable tyre for current recommendation
+        if recommended_tyre == "wet" and current_tyre == "WET":
             return False, ""
+        if recommended_tyre == "intermediate" and current_tyre == "INTERMEDIATE":
+            return False, ""
+        if recommended_tyre == "dry" and current_tyre in ["SOFT", "MEDIUM", "HARD"]:
+            return False, ""
+
+        # Enforce minimum stint in rain tyres to avoid unrealistic back-to-back swaps
+        min_stint_on_weather_tyre = 0
+        if current_tyre == "INTERMEDIATE":
+            min_stint_on_weather_tyre = 8
+        elif current_tyre == "WET":
+            min_stint_on_weather_tyre = 10
+
+        if is_target:
+            intensity_factor = self.narrative_config.strategy_bias
+            if min_stint_on_weather_tyre > 0:
+                min_stint_on_weather_tyre = max(
+                    4,
+                    int(round(min_stint_on_weather_tyre * (1.0 - 0.45 * intensity_factor))),
+                )
+        elif is_opponent:
+            intensity_factor = self.narrative_config.opponent_debuff
+            if min_stint_on_weather_tyre > 0:
+                min_stint_on_weather_tyre = int(
+                    round(min_stint_on_weather_tyre * (1.0 + 0.25 * intensity_factor))
+                )
+
+        if self.narrative_config.is_ultra():
+            if is_target and min_stint_on_weather_tyre > 0:
+                min_stint_on_weather_tyre = max(2, int(round(min_stint_on_weather_tyre * 0.35)))
+            elif is_opponent and min_stint_on_weather_tyre > 0:
+                min_stint_on_weather_tyre = int(round(min_stint_on_weather_tyre * 1.4))
+
+        if min_stint_on_weather_tyre > 0 and laps_since_last_pit < min_stint_on_weather_tyre:
+            emergency_switch = (
+                (track_condition == TrackCondition.FLOODED and current_tyre == "INTERMEDIATE")
+                or (track_condition == TrackCondition.DRY and current_tyre == "WET" and laps_since_last_pit >= 6)
+            )
+            if not emergency_switch:
+                return False, ""
+
+        # Check cooldown period (track-specific or default)
+        cooldown_laps = max(
+            self.race_state.weather_pit_cooldown_laps,
+            track_rules.weather_pit_cooldown_laps,
+        )
+        if is_target:
+            cooldown_laps = max(
+                2,
+                cooldown_laps - int(round(3 * self.narrative_config.strategy_bias)),
+            )
+        elif is_opponent:
+            cooldown_laps = cooldown_laps + int(
+                round(2 * self.narrative_config.opponent_debuff)
+            )
+        if self.narrative_config.is_ultra():
+            if is_target:
+                cooldown_laps = 1
+            elif is_opponent:
+                cooldown_laps += 3
+        if laps_since_last_pit < cooldown_laps:
+            return False, f""
+
+        # Check maximum weather pits (track-specific or default)
+        max_weather_pits = min(
+            self.race_state.max_weather_pits_per_race, track_rules.max_weather_pits
+        )
+        if is_target:
+            max_weather_pits += int(round(1.0 + self.narrative_config.strategy_bias))
+        elif is_opponent:
+            max_weather_pits = max(
+                1,
+                max_weather_pits - int(round(1 + self.narrative_config.opponent_debuff)),
+            )
+        if self.narrative_config.is_ultra():
+            if is_target:
+                max_weather_pits += 2
+            elif is_opponent:
+                max_weather_pits = max(1, max_weather_pits - 2)
+        if weather_pits_done >= max_weather_pits:
+            return False, f""
+
+        # Check max pit stops limit for track (e.g., Monaco = 1)
+        total_pits_done = len(
+            [
+                pl
+                for pl in self.race_state.lap_times.get(driver, [])
+                if isinstance(pl, dict) and pl.get("is_pit_lap", False)
+            ]
+        )
+        if track_rules.max_pit_stops is not None:
+            if total_pits_done >= track_rules.max_pit_stops:
+                # Only allow in emergency (heavy rain on slicks)
+                if not (
+                    track_condition in [TrackCondition.WET, TrackCondition.FLOODED]
+                    and current_tyre in ["SOFT", "MEDIUM", "HARD"]
+                ):
+                    return False, ""
 
         # Dry tyres on wet track - should pit for inters or wets
         if track_condition in [
             TrackCondition.WET,
             TrackCondition.FLOODED,
         ] and current_tyre in ["SOFT", "MEDIUM", "HARD"]:
+            if is_opponent and track_condition == TrackCondition.WET:
+                hesitation = min(0.65, 0.2 + self.narrative_config.opponent_debuff)
+                if self.narrative_config.is_ultra():
+                    hesitation = 0.85
+                if random.random() < hesitation:
+                    return False, ""
+
             if recommended_tyre == "wet":
-                return True, "Pitting for Full Wet tyres - heavy rain"
+                return (
+                    True,
+                    f"Pitting for Full Wet tyres - heavy rain (weather pit {weather_pits_done + 1}/{max_weather_pits})",
+                )
             elif recommended_tyre == "intermediate":
-                return True, "Pitting for Intermediate tyres - light rain"
+                return (
+                    True,
+                    f"Pitting for Intermediate tyres - light rain (weather pit {weather_pits_done + 1}/{max_weather_pits})",
+                )
 
         # Wet tyres on drying track - consider switching to dry
         if track_condition == TrackCondition.DRY and current_tyre in [
             "INTERMEDIATE",
             "WET",
         ]:
-            return True, "Pitting for dry tyres - track drying"
+            if is_opponent:
+                hold_chance = min(0.55, 0.1 + self.narrative_config.opponent_debuff)
+                if self.narrative_config.is_ultra():
+                    hold_chance = 0.8
+                if random.random() < hold_chance:
+                    return False, ""
+            return (
+                True,
+                f"Pitting for dry tyres - track drying (weather pit {weather_pits_done + 1}/{max_weather_pits})",
+            )
 
         return False, ""
 
@@ -2195,9 +3025,16 @@ class EnhancedRaceSimulator:
             launch_roll = roll_d10()
 
             # Check for poor start (wheelspin or mistakes)
+            # Norris保持原始起步失误比例，其余车手适度下调
+            start_mistake_gate_roll = None
+            start_mistake_gate = True
+            if driver != "Norris" and launch_roll in (1, 2):
+                start_mistake_gate_roll = roll_d10()
+                start_mistake_gate = start_mistake_gate_roll <= 5
+
             # 限制起步骰子的位置变化幅度：最多上升/下降2-3位
             # 每位差距约0.15秒，所以限制时间变化范围
-            if launch_roll == 1:  # Major mistake - 最多下降2-3位
+            if launch_roll == 1 and start_mistake_gate:  # Major mistake - 最多下降2-3位
                 start_delta += random.uniform(0.3, 0.5)  # 限制损失，约2-3位
                 start_outcome = "major_mistake"
                 self.dice_logger.log_roll(
@@ -2213,9 +3050,10 @@ class EnhancedRaceSimulator:
                         "reaction_roll": reaction_roll,
                         "reaction_time": reaction_time,
                         "max_positions_lost": "2-3",
+                        "mistake_gate_roll": start_mistake_gate_roll,
                     },
                 )
-            elif launch_roll == 2:  # Minor wheelspin - 最多下降1-2位
+            elif launch_roll == 2 and start_mistake_gate:  # Minor wheelspin - 最多下降1-2位
                 start_delta += random.uniform(0.15, 0.3)  # 限制损失，约1-2位
                 start_outcome = "wheelspin"
                 self.dice_logger.log_roll(
@@ -2230,6 +3068,7 @@ class EnhancedRaceSimulator:
                         "grid_position": grid_pos,
                         "reaction_roll": reaction_roll,
                         "max_positions_lost": "1-2",
+                        "mistake_gate_roll": start_mistake_gate_roll,
                     },
                 )
             elif launch_roll >= 9:  # Excellent launch - 最多上升2-3位
@@ -2300,7 +3139,10 @@ class EnhancedRaceSimulator:
 
             # Roll for vehicle fault (MODERN F1 - LOW PROBABILITY)
             # Using dice system to control check frequency
-            if team_stability and lap == self._next_vehicle_fault_check_lap:
+            next_vehicle_fault_lap = self._next_vehicle_fault_check_lap_by_driver.get(
+                driver, 3
+            )
+            if team_stability and lap == next_vehicle_fault_lap:
                 fault_prob = get_fault_probability_per_lap(team_stability)
                 fault_roll = random.random()  # 0-1 float
 
@@ -2372,7 +3214,11 @@ class EnhancedRaceSimulator:
                     # Create front wing damage for moderate+ aerodynamic-related faults
                     # Roll d6 to determine if it's an aero fault (1-2 = aero)
                     component_roll = roll_d6()
-                    if component_roll <= 2 and severity in ("moderate", "major", "catastrophic"):
+                    if component_roll <= 2 and severity in (
+                        "moderate",
+                        "major",
+                        "catastrophic",
+                    ):
                         damage = self.front_wing_manager.create_damage_from_incident(
                             driver=driver,
                             incident_type="vehicle_fault",
@@ -2385,24 +3231,34 @@ class EnhancedRaceSimulator:
                     # After a fault, schedule next check sooner (more likely to have issues)
                     # Use d6: 1-3 laps
                     next_check = roll_d6()
-                    self._next_vehicle_fault_check_lap = lap + next_check
+                    self._next_vehicle_fault_check_lap_by_driver[driver] = (
+                        lap + next_check
+                    )
 
             # Schedule next vehicle fault check using dice if we've reached the check lap
             # and no fault occurred this lap
-            if lap == self._next_vehicle_fault_check_lap:
+            if lap == self._next_vehicle_fault_check_lap_by_driver.get(driver, 3):
                 # Use d10 to determine next check interval (1-10 laps)
                 next_check_interval = roll_d10()
-                self._next_vehicle_fault_check_lap = lap + next_check_interval
+                self._next_vehicle_fault_check_lap_by_driver[driver] = (
+                    lap + next_check_interval
+                )
 
             # Driver error check - only check at intervals to avoid excessive errors
-            if lap == self._next_driver_error_check_lap:
+            if lap == self._next_driver_error_check_lap_by_driver.get(driver, 3):
                 # Roll for driver error using personality-based probability
                 error_roll = roll_d100()
+                team = self.driver_teams.get(driver, "Unknown")
+                team_pr = self.team_pr_values.get(team, 300.0)
+                dr_value = float(self.driver_data.get(driver, {}).get("DR_Value", 100.0))
+                driver_r_value = dr_value * team_pr / 100.0
                 error_threshold = calculate_driver_error_probability(
                     driver,
                     position=driver_position,
                     is_fighting=is_fighting,
                     is_leading=is_leading,
+                    r_value=driver_r_value,
+                    team_pr=team_pr,
                 )
 
                 self.dice_logger.log_roll(
@@ -2422,26 +3278,19 @@ class EnhancedRaceSimulator:
                 )
 
                 if error_roll <= error_threshold:
-                    error_type_roll = roll_d6()
-                    error_severity = (
-                        "minor"
-                        if error_roll <= error_threshold * 0.4
-                        else "moderate"
-                        if error_roll <= error_threshold * 0.7
-                        else "major"
-                    )
+                    error_impact = roll_driver_error_impact()
+                    error_severity = error_impact["damage_severity"]
                     incidents.append(
                         {
                             "type": "driver_error",
                             "driver": driver,
                             "lap": lap,
-                            "error_type": "locking_brakes"
-                            if error_type_roll <= 2
-                            else "off_track"
-                            if error_type_roll <= 4
-                            else "mistake",
+                            "error_type": error_impact["error_type"],
                             "severity": error_severity,
-                            "time_loss": random.uniform(0.5, 3.0),
+                            "impact_class": error_impact["impact_class"],
+                            "major_failure": error_impact["major_failure"],
+                            "impact_dice": error_impact["dice"],
+                            "time_loss": error_impact["time_loss"],
                         }
                     )
 
@@ -2471,9 +3320,11 @@ class EnhancedRaceSimulator:
                     if damage:
                         self.race_state.front_wing_damage[driver] = damage.to_dict()
 
-                # Schedule next driver error check (every 3-5 laps to reduce frequency)
-                next_error_check = random.randint(3, 5)
-                self._next_driver_error_check_lap = lap + next_error_check
+                # Schedule next driver error check (every 4-6 laps to reduce frequency)
+                next_error_check = random.randint(4, 6)
+                self._next_driver_error_check_lap_by_driver[driver] = (
+                    lap + next_error_check
+                )
 
         return incidents
 
@@ -2533,7 +3384,9 @@ class EnhancedRaceSimulator:
                         lap=lap,
                     )
                     if damage:
-                        self.race_state.front_wing_damage[collision_driver] = damage.to_dict()
+                        self.race_state.front_wing_damage[collision_driver] = (
+                            damage.to_dict()
+                        )
 
             return {
                 "type": "overtake_collision",
@@ -2574,12 +3427,17 @@ class EnhancedRaceSimulator:
         attacker_info = self.driver_data.get(driver_a, {})
         attacker_team = attacker_info.get("Team", "Unknown")
         attacker_stability = self.team_stabilities.get(attacker_team)
+        attacker_team_pr = self.team_pr_values.get(attacker_team, 300.0)
+        attacker_dr = float(attacker_info.get("DR_Value", 100.0))
+        attacker_r_value = attacker_dr * attacker_team_pr / 100.0
 
         attacker_error_threshold = calculate_driver_error_probability(
             driver_a,
             position=position_a,
             is_fighting=True,
             is_leading=False,
+            r_value=attacker_r_value,
+            team_pr=attacker_team_pr,
         )
 
         self.dice_logger.log_roll(
@@ -2603,12 +3461,17 @@ class EnhancedRaceSimulator:
         defender_error_roll = roll_d100()
         defender_info = self.driver_data.get(driver_b, {})
         defender_team = defender_info.get("Team", "Unknown")
+        defender_team_pr = self.team_pr_values.get(defender_team, 300.0)
+        defender_dr = float(defender_info.get("DR_Value", 100.0))
+        defender_r_value = defender_dr * defender_team_pr / 100.0
 
         defender_error_threshold = calculate_driver_error_probability(
             driver_b,
             position=position_b,
             is_fighting=True,
             is_leading=False,
+            r_value=defender_r_value,
+            team_pr=defender_team_pr,
         )
 
         self.dice_logger.log_roll(
@@ -2630,20 +3493,26 @@ class EnhancedRaceSimulator:
 
         # If either made an error, create an incident
         if attacker_error_roll <= attacker_error_threshold:
+            attacker_impact = roll_driver_error_impact()
             return {
                 "type": "driver_error",
                 "lap": lap,
                 "driver": driver_a,
                 "cause": "overtake_attempt_failed",
-                "time_loss": 3.0,  # Small time loss for mistake
+                "impact_class": attacker_impact["impact_class"],
+                "major_failure": attacker_impact["major_failure"],
+                "time_loss": attacker_impact["time_loss"],
             }
         elif defender_error_roll <= defender_error_threshold:
+            defender_impact = roll_driver_error_impact()
             return {
                 "type": "driver_error",
                 "lap": lap,
                 "driver": driver_b,
                 "cause": "overtake_defend_failed",
-                "time_loss": 3.0,
+                "impact_class": defender_impact["impact_class"],
+                "major_failure": defender_impact["major_failure"],
+                "time_loss": defender_impact["time_loss"],
             }
 
         return None
@@ -2667,6 +3536,7 @@ class EnhancedRaceSimulator:
 
         self.race_state.sc_active = True
         self.race_state.sc_laps_remaining = sc_laps
+        self.race_state.sc_activation_lap = lap
 
         return {
             "type": "safety_car",
@@ -2695,6 +3565,7 @@ class EnhancedRaceSimulator:
 
         self.race_state.vsc_active = True
         self.race_state.vsc_laps_remaining = vsc_laps
+        self.race_state.vsc_activation_lap = lap
 
         return {
             "type": "vsc",
@@ -2804,6 +3675,76 @@ class EnhancedRaceSimulator:
 
         return lap_times
 
+    def _count_completed_pits(self, driver_result: Dict[str, Any], lap: int) -> int:
+        pit_laps = driver_result.get("pit_laps", [])
+        return sum(1 for pit_lap in pit_laps if pit_lap < lap)
+
+    def _apply_immediate_team_pit(self, team: str, lap: int, results: Dict[str, Dict]):
+        """Apply immediate SC/VSC pit response for all active drivers in a team."""
+        track_rules = get_track_rules(self.track_name)
+        max_bring_forward_laps = 10
+
+        for driver_name, driver_team in self.driver_teams.items():
+            if driver_team != team or driver_name not in results:
+                continue
+            if self.race_state.is_dnf(driver_name):
+                continue
+
+            pit_laps = results[driver_name].get("pit_laps", [])
+            if lap in pit_laps:
+                continue
+
+            future_pits = sorted([pl for pl in pit_laps if pl >= lap])
+            if not future_pits:
+                continue
+
+            next_planned_pit = future_pits[0]
+            if next_planned_pit - lap > max_bring_forward_laps:
+                continue
+
+            last_pit_lap = max([pl for pl in pit_laps if pl < lap], default=0)
+            completed_pits = self._count_completed_pits(results[driver_name], lap)
+            is_allowed, _ = track_rules.is_pit_allowed(
+                current_lap=lap,
+                last_pit_lap=last_pit_lap,
+                pit_stops_completed=completed_pits,
+                is_weather_related=False,
+                weather_pits_count=0,
+            )
+            if not is_allowed:
+                continue
+
+            idx = pit_laps.index(next_planned_pit)
+            pit_laps[idx] = lap
+
+            results[driver_name]["pit_laps"] = sorted(set(pit_laps))
+
+    def _apply_sc_pack_tightening(
+        self,
+        sorted_drivers: List[Tuple[str, float]],
+        results: Dict[str, Dict],
+    ) -> List[Tuple[str, float]]:
+        """Apply SC field compression so the pack reforms behind the leader."""
+        if not self.race_state.sc_active or not sorted_drivers:
+            return sorted_drivers
+
+        leader, leader_time = sorted_drivers[0]
+        adjusted = [(leader, leader_time)]
+        previous_time = leader_time
+
+        for driver, _ in sorted_drivers[1:]:
+            raw_time = results[driver]["cumulative_time"]
+            target_gap = max(0.2, 0.8 + random.uniform(-0.15, 0.15))
+            tightened_time = min(raw_time, previous_time + target_gap)
+            if tightened_time <= previous_time:
+                tightened_time = previous_time + 0.2
+
+            results[driver]["cumulative_time"] = tightened_time
+            adjusted.append((driver, tightened_time))
+            previous_time = tightened_time
+
+        return adjusted
+
     def simulate_lap(
         self,
         lap: int,
@@ -2840,6 +3781,12 @@ class EnhancedRaceSimulator:
                     track_pit_time_val = track_row["Pit Time"]
                     if len(track_pit_time_val) > 0:
                         track_pit_time = float(track_pit_time_val.iloc[0])
+
+            # SC/VSC pit benefit: pit-lane time loss is reduced during neutralized periods.
+            if self.race_state.sc_active:
+                track_pit_time = max(8.0, track_pit_time - 10.0)
+            elif self.race_state.vsc_active:
+                track_pit_time = max(8.0, track_pit_time - 6.0)
 
             pit_time = track_pit_time + tire_change_time
 
@@ -2917,25 +3864,11 @@ class EnhancedRaceSimulator:
         # ===================================================================
         # Get weather condition for skill context
         is_raining = False
-        if (
-            hasattr(self.race_state, "weather_integration")
-            and self.race_state.weather_integration
-        ):
-            # Calculate race time in minutes for weather lookup
-            race_time_minutes = self.get_relative_time() / 60.0
+        current_weather = getattr(self.race_state, "current_weather_state", None)
+        if current_weather is not None:
             try:
-                current_weather = (
-                    self.race_state.weather_integration.get_current_weather(
-                        lap=lap, race_time=race_time_minutes
-                    )
-                )
-                is_raining = current_weather.rain_intensity.value > 0
-            except Exception as e:
-                # Log warning and fallback to no rain if weather lookup fails
-                import sys
-
-                print(f"Warning: Weather lookup failed: {e}", file=sys.stderr)
-                traceback.print_exc()
+                is_raining = current_weather.rain_intensity != RainIntensity.NONE
+            except Exception:
                 is_raining = False
 
         # Get current race position from race_state
@@ -3071,6 +4004,9 @@ class EnhancedRaceSimulator:
             0.08,
             previous_bias,
             markov_factor=0.6,
+            team_pr=team_pr,
+            pr_min=pr_min_val,
+            pr_max=pr_max_val,
         )
 
         # Update bias for next lap (Markov chain state)
@@ -3079,7 +4015,8 @@ class EnhancedRaceSimulator:
         # Generate lap time with Markov bias as mean shift
         # Top drivers maintain consistency better due to lower variance
         lap_noise = np.random.normal(new_bias, noise_std)
-        lap_time = base_lap_time + degradation * 10 + lap_noise
+        compound_pace_delta = get_tyre_pace_delta_seconds(current_tyre)
+        lap_time = base_lap_time + compound_pace_delta + degradation * 10 + lap_noise
 
         if lap == 1:
             lap_time += start_delta
@@ -3160,7 +4097,11 @@ class EnhancedRaceSimulator:
                     # 95% chance of 1-stop, 5% chance of 2-stop (rare but interesting scenarios)
                     strategy = random.choices(["1", "2"], weights=[0.95, 0.05])[0]
                 else:
-                    strategy = determine_pit_strategy(self.track_name, self.pit_data)
+                    strategy = determine_pit_strategy_with_feedback(
+                        self.track_name,
+                        self.pit_data,
+                        team=team,
+                    )
 
                 pit_laps = generate_pit_laps(self.track_name, strategy, self.pit_data)
                 # Convert strategy to int for tyre count
@@ -3192,6 +4133,11 @@ class EnhancedRaceSimulator:
                 "position": self.driver_data[driver].get("grid_position", 20),
                 "laps_completed": 0,
                 "interval": 0.0,
+                # FIA Lapping fields (real-time tracking)
+                "laps_down": 0,  # Number of laps behind the leader
+                "is_lapped": False,  # Whether driver has been lapped
+                "actual_laps": 0,  # Actual physical laps completed
+                "effective_laps": 0,  # Effective laps for classification
             }
 
             # Get team strategy
@@ -3204,7 +4150,11 @@ class EnhancedRaceSimulator:
                     team_strategies[team]["tyre_compounds_set"]
                 )
             else:
-                strategy = determine_pit_strategy(self.track_name, self.pit_data)
+                strategy = determine_pit_strategy_with_feedback(
+                    self.track_name,
+                    self.pit_data,
+                    team=team,
+                )
                 strategy_int = (
                     int(strategy)
                     if isinstance(strategy, (int, str))
@@ -3240,30 +4190,8 @@ class EnhancedRaceSimulator:
         print(f"\n=== Starting Race (Lap 1 to {self.num_laps}) ===")
 
         lap = 1
-        while lap <= self.num_laps or (
-            self.race_state.chequered_flag_shown
-            and any(
-                results[d]["laps_completed"] < self.num_laps
-                for d in results
-                if not self.race_state.is_dnf(d)
-            )
-        ):
+        while lap <= self.num_laps:
             self.race_state.current_lap = lap
-
-            # If chequered flag shown, only allow lapped cars to finish their current lap
-            if self.race_state.chequered_flag_shown:
-                # Check if any non-DNF driver still needs to complete their final lap
-                active_lapped_cars = [
-                    d
-                    for d in results
-                    if not self.race_state.is_dnf(d)
-                    and results[d]["laps_completed"] < self.num_laps
-                ]
-                if not active_lapped_cars:
-                    break  # All cars have finished
-                print(
-                    f"\n  Lap {lap}: Allowing lapped cars to finish their final lap..."
-                )
 
             # Get Ferrari driver (protagonist) for strategist decisions
             ferrari_drivers = [
@@ -3276,6 +4204,7 @@ class EnhancedRaceSimulator:
             # Update weather for this lap
             race_time_minutes = self.get_relative_time() / 60.0
             weather_effects = self.update_weather_for_lap(lap, race_time_minutes)
+            weather_effects = self._apply_track_water_model(lap, weather_effects, results)
 
             # Handle race control responses to weather
             weather_rc_event = self.handle_weather_race_control(lap, weather_effects)
@@ -3310,9 +4239,15 @@ class EnhancedRaceSimulator:
 
                 # Create race context for strategist
                 self.strategist_integration.update_context(
+                    track_name=self.track_name,
                     current_lap=lap,
                     total_laps=self.num_laps,
                     race_position=ferrari_pos,
+                    pit_stops_completed=self._count_completed_pits(
+                        results[ferrari_driver], lap
+                    )
+                    if ferrari_driver in results
+                    else 0,
                     tyre_life=ferrari_tyre_life,
                     current_tyre=results[ferrari_driver]["tyre_sequence"][
                         min(
@@ -3377,7 +4312,14 @@ class EnhancedRaceSimulator:
             sc_deployed = self.race_state.sc_active
             vsc_deployed = self.race_state.vsc_active
 
-            if (sc_deployed or vsc_deployed) and ferrari_drivers:
+            is_sc_response_window = (
+                sc_deployed and self.race_state.sc_activation_lap == lap
+            )
+            is_vsc_response_window = (
+                vsc_deployed and self.race_state.vsc_activation_lap == lap
+            )
+
+            if (is_sc_response_window or is_vsc_response_window) and ferrari_drivers:
                 ferrari_driver = ferrari_drivers[0]
                 ferrari_pos = (
                     results[ferrari_driver].get("position", 10)
@@ -3388,9 +4330,15 @@ class EnhancedRaceSimulator:
 
                 # Update context and make SC decision
                 self.strategist_integration.update_context(
+                    track_name=self.track_name,
                     current_lap=lap,
                     total_laps=self.num_laps,
                     race_position=ferrari_pos,
+                    pit_stops_completed=self._count_completed_pits(
+                        results[ferrari_driver], lap
+                    )
+                    if ferrari_driver in results
+                    else 0,
                     tyre_life=lap
                     - sum(1 for pl in results[ferrari_driver]["pit_laps"] if pl < lap)
                     if ferrari_driver in results
@@ -3435,17 +4383,77 @@ class EnhancedRaceSimulator:
                         f"  [STRATEGIST] {'SC' if sc_deployed else 'VSC'} response: {sc_decision.get('recommended_action')} (roll: {sc_decision.get('roll')})"
                     )
 
+                    if sc_decision.get("pit_recommendation", False) and sc_decision.get(
+                        "recommended_action"
+                    ) in {"PIT_NOW", "PIT_NOW_BONUS", "PIT_OR_STAY"}:
+                        self._apply_immediate_team_pit("Ferrari", lap, results)
+
+            # Apply SC/VSC response for all strategist-enabled teams
+            if is_sc_response_window or is_vsc_response_window:
+                for team, strategist in self.team_strategist_integrations.items():
+                    if team == "Ferrari":
+                        continue
+
+                    team_driver = None
+                    for driver_name, driver_team in self.driver_teams.items():
+                        if driver_team == team and driver_name in results:
+                            team_driver = driver_name
+                            break
+
+                    if not team_driver:
+                        continue
+
+                    driver_result = results[team_driver]
+                    completed_pits = self._count_completed_pits(driver_result, lap)
+                    current_idx = min(
+                        completed_pits,
+                        max(0, len(driver_result.get("tyre_sequence", [])) - 1),
+                    )
+
+                    strategist.update_context(
+                        track_name=self.track_name,
+                        current_lap=lap,
+                        total_laps=self.num_laps,
+                        race_position=driver_result.get("position", 10),
+                        pit_stops_completed=completed_pits,
+                        tyre_life=lap - sum(1 for pl in driver_result["pit_laps"] if pl < lap),
+                        current_tyre=driver_result["tyre_sequence"][current_idx]
+                        if driver_result.get("tyre_sequence")
+                        else "MEDIUM",
+                        is_wet=False,
+                        rain_eta=None,
+                        is_sc_active=sc_deployed,
+                        is_vsc_active=vsc_deployed,
+                    )
+
+                    team_sc_decision = strategist.on_sc_decision(
+                        strategist.state.current_context,
+                        is_vsc=vsc_deployed,
+                        laps_until_end=self.num_laps - lap,
+                    )
+
+                    if team_sc_decision and team_sc_decision.get(
+                        "pit_recommendation", False
+                    ) and team_sc_decision.get("recommended_action") in {
+                        "PIT_NOW",
+                        "PIT_NOW_BONUS",
+                        "PIT_OR_STAY",
+                    }:
+                        self._apply_immediate_team_pit(team, lap, results)
+
             # Process safety car laps
             if self.race_state.sc_active:
                 self.race_state.sc_laps_remaining -= 1
                 if self.race_state.sc_laps_remaining <= 0:
                     self.race_state.sc_active = False
+                    self.race_state.sc_activation_lap = None
                     print(f"  *** Safety Car ends at lap {lap} ***")
 
             if self.race_state.vsc_active:
                 self.race_state.vsc_laps_remaining -= 1
                 if self.race_state.vsc_laps_remaining <= 0:
                     self.race_state.vsc_active = False
+                    self.race_state.vsc_activation_lap = None
 
             # Check for incidents every lap
             if lap > 2:
@@ -3470,9 +4478,15 @@ class EnhancedRaceSimulator:
                 )
 
                 self.strategist_integration.update_context(
+                    track_name=self.track_name,
                     current_lap=lap,
                     total_laps=self.num_laps,
                     race_position=ferrari_pos,
+                    pit_stops_completed=self._count_completed_pits(
+                        results[ferrari_driver], lap
+                    )
+                    if ferrari_driver in results
+                    else 0,
                     tyre_life=lap
                     - sum(1 for pl in results[ferrari_driver]["pit_laps"] if pl < lap)
                     if ferrari_driver in results
@@ -3554,9 +4568,13 @@ class EnhancedRaceSimulator:
 
                         # Update context for pit decision
                         strategist.update_context(
+                            track_name=self.track_name,
                             current_lap=lap,
                             total_laps=self.num_laps,
                             race_position=driver_pos,
+                            pit_stops_completed=self._count_completed_pits(
+                                driver_result, lap
+                            ),
                             tyre_life=lap - sum(1 for pl in planned_pits if pl < lap),
                             current_tyre=driver_result["tyre_sequence"][
                                 min(
@@ -3655,6 +4673,10 @@ class EnhancedRaceSimulator:
                         wet_tyre = "MEDIUM"
                     driver_result["tyre_sequence"].append(wet_tyre)
                     self.race_state.last_weather_pit_decision[driver] = lap
+                    # Increment weather pit count
+                    self.race_state.weather_pits_count[driver] = (
+                        self.race_state.weather_pits_count.get(driver, 0) + 1
+                    )
                     print(f"    {driver} pits for {wet_tyre} tyres - {pit_reason}")
                     # Recalculate current tyre after weather pit
                     current_tyre_index = sum(
@@ -3693,10 +4715,37 @@ class EnhancedRaceSimulator:
                 elif self.race_state.vsc_active:
                     lap_time += random.uniform(8.0, 15.0)
 
+                # Narrative pacing assist/debuff (intensity-bounded)
+                if self.narrative_config.enabled:
+                    team = self.driver_teams.get(driver, "")
+                    if self.narrative_config.is_target_team(team):
+                        if self.narrative_config.is_ultra():
+                            lap_time *= 0.94
+                            if lap_result.get("pit_time", 0.0) > 0:
+                                lap_time = max(1.0, lap_time - max(self._target_pit_bonus_sec * 2.0, 1.5))
+                        else:
+                            lap_time *= max(0.96, 1.0 - self._target_pace_boost)
+                            if lap_result.get("pit_time", 0.0) > 0:
+                                lap_time = max(1.0, lap_time - self._target_pit_bonus_sec)
+                    elif team:
+                        if self.narrative_config.is_ultra():
+                            lap_time *= 1.03
+                            if lap_result.get("pit_time", 0.0) > 0:
+                                lap_time += max(self._opponent_pit_penalty_sec * 1.8, 2.0)
+                        else:
+                            lap_time *= 1.0 + self._opponent_pace_penalty
+                            if lap_result.get("pit_time", 0.0) > 0:
+                                lap_time += self._opponent_pit_penalty_sec
+
                 # Track cumulative time
                 driver_result["cumulative_time"] += lap_time
                 driver_result["lap_times"].append(lap_time)
                 driver_result["laps_completed"] += 1
+                driver_result["actual_laps"] += 1  # Physical laps completed
+                # effective_laps will be calculated based on lapping status
+                driver_result["effective_laps"] = (
+                    driver_result["actual_laps"] - driver_result["laps_down"]
+                )
                 lap_times_this_lap[driver] = driver_result["cumulative_time"]
 
                 # Record pit events
@@ -3730,7 +4779,7 @@ class EnhancedRaceSimulator:
             # Monaco-specific: Add overtake resistance (Fix 2a)
             # At Monaco, it's very hard to overtake, so we add a small bonus
             # to drivers who are already ahead based on their position
-            if is_monaco_track(self.track_name):
+            if is_monaco_track(self.track_name) and not self.race_state.sc_active:
                 # Apply position-based defense bonus for Monaco
                 # The further ahead you are, the harder it is to pass
                 monaco_defense_factor = {}
@@ -3745,8 +4794,42 @@ class EnhancedRaceSimulator:
                     monaco_defense_factor.items(), key=lambda x: x[1]
                 )
 
+            # Safety Car pack tightening / reformation
+            if self.race_state.sc_active:
+                sorted_drivers = self._apply_sc_pack_tightening(sorted_drivers, results)
+
             for position, (driver, _) in enumerate(sorted_drivers, 1):
                 results[driver]["position"] = position
+
+            # REAL-TIME LAPPING DETECTION (FIA-compliant)
+            # Check for lapping situations after all drivers have completed this lap
+            if not self.race_state.sc_active:  # Skip during safety car
+                lapping_events = self.lapping_detector.detect_lapping(
+                    results=results,
+                    current_lap=lap,
+                    safety_car_active=self.race_state.sc_active,
+                )
+
+                # Process any lapping events
+                for event in lapping_events:
+                    # Update results with lapping information
+                    results[event.lapped_driver]["laps_down"] = event.laps_down
+                    results[event.lapped_driver]["is_lapped"] = True
+
+                    # Update race state
+                    self.race_state.driver_lap_deficit[event.lapped_driver] = (
+                        event.laps_down
+                    )
+                    if event.laps_down > 0:
+                        self.race_state.lapped_cars[event.lapped_driver] = (
+                            event.laps_down
+                        )
+
+                    # Print lapping notification
+                    print(
+                        f"  [LAPPING - Lap {lap}] {event.leader} laps {event.lapped_driver} "
+                        f"(+{event.laps_down} Lap{'s' if event.laps_down > 1 else ''})"
+                    )
 
             # Increment lap counter for next iteration
             lap += 1
@@ -3809,79 +4892,21 @@ class EnhancedRaceSimulator:
             print(f"\n=== Strategic Decisions Summary ===")
             print("  No strategic decisions recorded.")
 
-        # Calculate lap deficits for lapped cars BEFORE final sorting
-        # In F1, a driver is lapped if they haven't completed as many laps as the leader
-        # when the chequered flag is shown. We simulate this by comparing cumulative times.
-        # First, find the leader
-        if results:
-            # Find provisional leader (most laps completed, then lowest cumulative time)
-            provisional_leader = min(
-                results.items(),
-                key=lambda x: (-x[1]["laps_completed"], x[1]["cumulative_time"]),
-            )
-            leader_driver, leader_result = provisional_leader
-            leader_laps = leader_result["laps_completed"]
-            leader_time = leader_result["cumulative_time"]
-            avg_lap_time = leader_time / leader_laps if leader_laps > 0 else 90.0
+        # FIA-style final classification based on leader chequered time
+        final_results = self._apply_fia_final_classification(results)
 
-            for driver, result in results.items():
-                # Calculate effective laps based on cumulative time
-                # If a driver's cumulative time is significantly behind, they've been lapped
-                time_gap = result["cumulative_time"] - leader_time
-
-                # A driver loses a lap for every full race lap time they're behind
-                # This simulates the effect of being lapped during the race
-                laps_down = (
-                    int(time_gap / avg_lap_time) if time_gap > avg_lap_time * 0.5 else 0
-                )
-
-                # Ensure laps_down doesn't exceed reasonable bounds
-                laps_down = (
-                    min(laps_down, result["laps_completed"] - 1)
-                    if result["laps_completed"] > 1
-                    else 0
-                )
-
-                if laps_down > 0:
-                    self.race_state.driver_lap_deficit[driver] = laps_down
-                    result["laps_down"] = laps_down
-                    # Adjust laps_completed to reflect being lapped
-                    # This is the key fix: reduce laps_completed for lapped cars
-                    result["laps_completed"] = max(1, leader_laps - laps_down)
-                else:
-                    result["laps_down"] = 0
-
-        # Calculate final results: sort by laps_completed (desc), then cumulative_time (asc)
-        # This ensures drivers who completed more laps rank higher (correct F1 race result logic)
-        # CRITICAL: This sort must happen AFTER laps_down correction is applied
-        final_results = sorted(
-            results.items(),
-            key=lambda x: (-x[1]["laps_completed"], x[1]["cumulative_time"]),
-        )
-
-        # Calculate intervals (gap to leader)
-        leader_time = None
-        for position, (driver, result) in enumerate(final_results, 1):
-            if position == 1:
-                # Leader has no interval (or 0.0)
-                result["interval"] = 0.0
-                leader_time = result["cumulative_time"]
-            else:
-                # Calculate gap to leader
-                result["interval"] = result["cumulative_time"] - leader_time
-
-        # Update position field to reflect final ranking
-        for position, (driver, result) in enumerate(final_results, 1):
-            results[driver]["position"] = position
-
-        # Print final results
+        # Print final results (FIA-compliant format)
         print("\n=== Final Race Results ===")
+        print("  (Sorted by effective laps, then cumulative time)")
         for position, (driver, result) in enumerate(final_results, 1):
             interval_str = ""
             laps_down_str = ""
 
-            # Show lap deficit for lapped cars
+            actual_laps = result.get("actual_laps", result["laps_completed"])
+            effective_laps = result.get("effective_laps", actual_laps)
             laps_down = result.get("laps_down", 0)
+
+            # Show lap deficit for lapped cars
             if laps_down > 0:
                 laps_down_str = f" [+{laps_down} Lap{'s' if laps_down > 1 else ''}]"
             elif position > 1:
@@ -3889,7 +4914,8 @@ class EnhancedRaceSimulator:
                 interval_str = f" (+{result['interval']:.3f}s)"
 
             print(
-                f"  P{position}: {driver} - {result['cumulative_time']:.3f}s{interval_str} ({result['laps_completed']} laps){laps_down_str}"
+                f"  P{position}: {driver} - {result['cumulative_time']:.3f}s{interval_str} "
+                f"({effective_laps}/{actual_laps} laps){laps_down_str}"
             )
 
         return results
@@ -3931,12 +4957,24 @@ def save_race_results(
         lap_dnfed = dnf_drivers.get(driver, "")
         reason = retirement_reasons.get(driver, "")
 
+        # Get lapping information (FIA-compliant)
+        actual_laps = result.get("actual_laps", result.get("laps_completed", 0))
+        effective_laps = result.get("effective_laps", actual_laps)
+        laps_down = result.get("laps_down", 0)
+        is_lapped = result.get("is_lapped", False)
+
         row = {
             "position": result["position"],
             "driver": driver,
             "team": team,
             "total_time": result["cumulative_time"],
             "interval": result.get("interval", 0.0),
+            # FIA-compliant lapping fields
+            "effective_laps": effective_laps,  # Laps for classification
+            "actual_laps": actual_laps,  # Physical laps completed
+            "laps_down": laps_down,  # Laps behind leader
+            "is_lapped": "Yes" if is_lapped else "No",
+            # Legacy field for backward compatibility
             "laps_completed": result.get("laps_completed", 0),
             "num_pits": len(result["pit_laps"]),
             "pit_laps": ",".join(map(str, result["pit_laps"]))

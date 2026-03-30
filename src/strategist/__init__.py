@@ -20,6 +20,9 @@ from src.strategist.strategist_types import (
     TeamOrderCompliance,
     DriverTeamOrderTraits,
     TeamOrderContext,
+    # Track-specific rules
+    TrackSpecificRules,
+    get_track_rules,
 )
 from src.strategist.strategist_manager import (
     StrategistManager,
@@ -57,4 +60,7 @@ __all__ = [
     "execute_team_order",
     "should_issue_team_order",
     "DEFAULT_DRIVER_TEAM_ORDER_TRAITS",
+    # Track-specific rules
+    "TrackSpecificRules",
+    "get_track_rules",
 ]

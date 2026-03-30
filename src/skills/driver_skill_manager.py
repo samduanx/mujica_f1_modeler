@@ -419,23 +419,19 @@ class DriverSkillManager:
         if not self.has_skill(driver, "盲盒车"):
             return 0.0
 
-        # Roll for blind box effect: random modifier between -1.0 and +1.0
-        # This is a "blind box" - you don't know what you'll get until the race starts
-        roll = random.random()  # 0.0 to 1.0
-
-        # 25% chance for each tier: -1.0, -0.5, +0.5, +1.0
-        if roll < 0.25:
-            modifier = -1.0  # Bad car
-        elif roll < 0.50:
-            modifier = -0.5  # Slightly bad
-        elif roll < 0.75:
-            modifier = 0.5  # Slightly good
-        else:
-            modifier = 1.0  # Good car
-
-        # Store the roll for reference during the race
+        # Check cache first (one value per driver per race)
         if not hasattr(self, "blind_box_rolls"):
             self.blind_box_rolls = {}
+
+        if driver in self.blind_box_rolls:
+            return self.blind_box_rolls[driver]
+
+        # Use the canonical possible values defined for 盲盒车
+        possible_values = [-0.5, -0.3, 0.0, 0.3, 0.5]
+
+        modifier = random.choice(possible_values)
+
+        # Cache for the race
         self.blind_box_rolls[driver] = modifier
 
         return modifier

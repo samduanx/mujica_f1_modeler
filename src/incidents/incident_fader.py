@@ -195,14 +195,13 @@ class IncidentFrequencyFader:
         """
         fade_factor = self.calculate_fade_factor(incident_type, laps_completed)
 
-        # Adjust roll based on fade factor
-        if fade_factor < 1.0:
-            # Fading - reduce chance (increase effective threshold)
+        # Adjust roll based on fade factor.
+        # A fade_factor < 1.0 => reduce chance (make roll larger).
+        # A fade_factor > 1.0 => boost chance (make roll smaller).
+        # Using division by fade_factor handles both cases consistently.
+        try:
             adjusted_roll = int(base_roll / fade_factor)
-        elif fade_factor > 1.0:
-            # Boosting - increase chance (decrease effective threshold)
-            adjusted_roll = int(base_roll * fade_factor)
-        else:
+        except Exception:
             adjusted_roll = base_roll
 
         return min(100, max(1, adjusted_roll))

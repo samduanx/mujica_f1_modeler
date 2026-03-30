@@ -12,7 +12,7 @@ Defines all core data structures for the Strategist System including:
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Dict
+from typing import Optional, Dict, List, Tuple
 
 
 class DecisionType(Enum):
@@ -648,3 +648,190 @@ class TeamOrderContext:
     def get_pace_delta(self) -> float:
         """Calculate pace delta (beneficiary - target, negative = faster)."""
         return self.beneficiary_pace - self.target_pace
+
+
+# ============== Team-Level Strategy Sharing ==============
+
+
+@dataclass
+class TeamStrategyDecision:
+    """
+    Team-level strategy decision shared between teammates.
+
+    When a strategist makes a decision for one driver, the same decision
+    should be applied to the teammate to ensure team strategy consistency.
+
+    Attributes:
+        team: Team name
+        decision_type: Type of strategy decision
+        decision: The actual strategy decision made
+        primary_driver: Driver for whom the decision was originally made
+        applied_to: List of drivers this decision has been applied to
+        lap_decided: Lap when the decision was made
+        expires_after_laps: Decision expires after this many laps
+    """
+
+    team: str
+    decision_type: DecisionType
+    decision: StrategyDecision
+    primary_driver: str
+    applied_to: List[str] = field(default_factory=list)
+    lap_decided: int = 0
+    expires_after_laps: int = 5  # Default: decision valid for 5 laps
+
+    def is_expired(self, current_lap: int) -> bool:
+        """Check if this decision has expired."""
+        return current_lap - self.lap_decided > self.expires_after_laps
+
+    def is_applied_to(self, driver: str) -> bool:
+        """Check if this decision has been applied to a specific driver."""
+        return driver in self.applied_to
+
+    def apply_to_driver(self, driver: str) -> None:
+        """Mark this decision as applied to a driver."""
+        if driver not in self.applied_to:
+            self.applied_to.append(driver)
+
+
+@dataclass
+class TrackSpecificRules:
+    """
+    Track-specific strategy rules and limitations.
+
+    Some tracks have unique characteristics that affect strategy decisions:
+    - Monaco: Maximum 1 pit stop recommended (pit lane is very slow)
+    - Singapore: Similar to Monaco, limited overtaking
+    - Monza: Fast pit lane, more aggressive strategies possible
+    """
+
+    track_name: str
+    max_pit_stops: Optional[int] = None  # None = no limit
+    min_pit_interval_laps: int = 10  # Minimum laps between pit stops
+    weather_pit_cooldown_laps: int = 5  # Minimum laps between weather pits
+    max_weather_pits: int = 3  # Maximum weather-related pit stops per race
+    undercut_difficulty: int = 0  # Modifier for undercut attempts
+    overtake_difficulty: str = "medium"  # low, medium, high, very_high
+
+    def is_pit_allowed(
+        self,
+        current_lap: int,
+        last_pit_lap: int,
+        pit_stops_completed: int,
+        is_weather_related: bool = False,
+        weather_pits_count: int = 0,
+    ) -> Tuple[bool, str]:
+        """
+        Check if a pit stop is allowed based on track rules.
+
+        Args:
+            current_lap: Current race lap
+            last_pit_lap: Lap of last pit stop
+            pit_stops_completed: Number of pit stops already completed
+            is_weather_related: Whether this is a weather-triggered pit
+            weather_pits_count: Number of weather pits already done
+
+        Returns:
+            Tuple of (allowed, reason)
+        """
+        # Check max pit stops limit
+        if self.max_pit_stops is not None:
+            if pit_stops_completed >= self.max_pit_stops:
+                if (
+                    not is_weather_related
+                ):  # Weather pits can exceed limit in emergencies
+                    return (
+                        False,
+                        f"Max pit stops ({self.max_pit_stops}) reached for {self.track_name}",
+                    )
+
+        # Check minimum interval between pits
+        laps_since_last_pit = current_lap - last_pit_lap
+        if is_weather_related:
+            if laps_since_last_pit < self.weather_pit_cooldown_laps:
+                return (
+                    False,
+                    f"Weather pit cooldown: {laps_since_last_pit}/{self.weather_pit_cooldown_laps} laps",
+                )
+            # Check max weather pits
+            if weather_pits_count >= self.max_weather_pits:
+                return (False, f"Max weather pits ({self.max_weather_pits}) reached")
+        else:
+            if laps_since_last_pit < self.min_pit_interval_laps:
+                return (
+                    False,
+                    f"Min pit interval: {laps_since_last_pit}/{self.min_pit_interval_laps} laps",
+                )
+
+        return True, "Pit stop allowed"
+
+
+# Track-specific rules configuration
+TRACK_SPECIFIC_RULES: Dict[str, TrackSpecificRules] = {
+    "Monaco": TrackSpecificRules(
+        track_name="Monaco",
+        max_pit_stops=1,  # Monaco: maximum 1 pit stop
+        min_pit_interval_laps=25,  # At least 25 laps between stops
+        weather_pit_cooldown_laps=8,  # Longer cooldown for weather pits
+        max_weather_pits=2,  # Limit weather-related pits
+        undercut_difficulty=-2,  # Very hard to undercut
+        overtake_difficulty="very_low",
+    ),
+    "Singapore": TrackSpecificRules(
+        track_name="Singapore",
+        max_pit_stops=2,  # Singapore: max 2 pit stops
+        min_pit_interval_laps=20,
+        weather_pit_cooldown_laps=6,
+        max_weather_pits=2,
+        undercut_difficulty=-3,  # Extremely hard to undercut
+        overtake_difficulty="very_low",
+    ),
+    "Italy": TrackSpecificRules(
+        track_name="Italy",
+        max_pit_stops=None,  # No limit at Monza (fast pit lane)
+        min_pit_interval_laps=8,
+        weather_pit_cooldown_laps=4,
+        max_weather_pits=4,
+        undercut_difficulty=0,  # Normal undercut difficulty
+        overtake_difficulty="very_high",
+    ),
+    "Hungary": TrackSpecificRules(
+        track_name="Hungary",
+        max_pit_stops=2,  # Hungaroring: usually 1-2 stops
+        min_pit_interval_laps=18,
+        weather_pit_cooldown_laps=5,
+        max_weather_pits=3,
+        undercut_difficulty=-1,
+        overtake_difficulty="low",
+    ),
+}
+
+
+def get_track_rules(track_name: str) -> TrackSpecificRules:
+    """
+    Get track-specific rules for a track.
+
+    Args:
+        track_name: Name of the track
+
+    Returns:
+        TrackSpecificRules for the track, or default rules if not found
+    """
+    # Try exact match first
+    if track_name in TRACK_SPECIFIC_RULES:
+        return TRACK_SPECIFIC_RULES[track_name]
+
+    # Try case-insensitive match
+    for name, rules in TRACK_SPECIFIC_RULES.items():
+        if name.lower() == track_name.lower():
+            return rules
+
+    # Return default rules
+    return TrackSpecificRules(
+        track_name=track_name,
+        max_pit_stops=None,
+        min_pit_interval_laps=10,
+        weather_pit_cooldown_laps=5,
+        max_weather_pits=3,
+        undercut_difficulty=0,
+        overtake_difficulty="medium",
+    )

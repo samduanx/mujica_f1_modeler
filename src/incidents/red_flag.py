@@ -125,6 +125,18 @@ class RedFlagRaceDistanceRules:
                 "remaining_laps": total_laps,
             }
 
+        # If race already completed, treat as normal end (no red flag action)
+        if completed_laps >= total_laps:
+            return {
+                "outcome": RedFlagOutcome.RESTART.value,
+                "reason": "Race already completed - no red flag action",
+                "end_reason": None,
+                "completion_status": RaceCompletionStatus.FULL,
+                "classification_lap": completed_laps,
+                "full_points": True,
+                "points_percentage": 1.0,
+                "remaining_laps": 0,
+            }
         # More than 90% complete - race ends (threshold rule)
         if completion_ratio >= self.end_race_threshold:
             return {
@@ -135,6 +147,7 @@ class RedFlagRaceDistanceRules:
                 "classification_lap": completed_laps,
                 "full_points": True,  # Full points even though not 100%
                 "points_percentage": 1.0,
+                "insufficient_time": False,
                 "remaining_laps": total_laps - completed_laps,
             }
 

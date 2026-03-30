@@ -9,8 +9,8 @@ from typing import Dict, List, Optional, Tuple
 from enum import Enum
 import random
 
-from incidents.incident_types import TrackDifficulty, IncidentSeverity
-from incidents.driver_error import DriverErrorType
+from .incident_types import TrackDifficulty, IncidentSeverity
+from .driver_error import DriverErrorType
 
 
 class OvertakeSituation(Enum):

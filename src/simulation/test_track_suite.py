@@ -149,6 +149,7 @@ def create_driver_csv(
     track_name: str,
     output_dir: str = "outputs/tables",
     grid_positions: Optional[Dict[str, int]] = None,
+    setup_tuning_deltas: Optional[Dict[str, float]] = None,
 ) -> str:
     """
     Create a driver CSV file for a given track.
@@ -159,6 +160,8 @@ def create_driver_csv(
         grid_positions: Optional dict mapping driver names to grid positions (1-based).
                        When provided, drivers are sorted by grid position and the
                        GridPosition column is included in the CSV.
+        setup_tuning_deltas: Optional dict mapping driver names to setup tuning
+                     DR deltas from practice sessions.
 
     Returns:
         Path to the CSV file
@@ -167,8 +170,12 @@ def create_driver_csv(
 
     csv_path = os.path.join(output_dir, f"{track_name}.csv")
 
-    # If file already exists and no grid_positions specified, return the path
-    if os.path.exists(csv_path) and grid_positions is None:
+    # If file already exists and no dynamic inputs are specified, return the path
+    if (
+        os.path.exists(csv_path)
+        and grid_positions is None
+        and not setup_tuning_deltas
+    ):
         return csv_path
 
     # Determine driver order - use grid_positions if provided, otherwise default order
@@ -190,6 +197,11 @@ def create_driver_csv(
 
         # Apply track-specific adjustments to performance
         for driver, team, dr, pr, ro in sorted_drivers:
+            setup_delta = 0.0
+            if setup_tuning_deltas and driver in setup_tuning_deltas:
+                setup_delta = max(-0.5, min(0.5, float(setup_tuning_deltas[driver])))
+            adjusted_dr = dr + setup_delta
+
             # Adjust values based on track characteristics
             if track_name == "Monaco":
                 # Monaco favors technical drivers, slightly slower times
@@ -231,10 +243,12 @@ def create_driver_csv(
             if grid_positions:
                 grid_pos = grid_positions.get(driver, 99)
                 f.write(
-                    f"{driver},{team},{dr},{adjusted_pr:.2f},{adjusted_ro:.2f},{grid_pos}\n"
+                    f"{driver},{team},{adjusted_dr:.3f},{adjusted_pr:.2f},{adjusted_ro:.2f},{grid_pos}\n"
                 )
             else:
-                f.write(f"{driver},{team},{dr},{adjusted_pr:.2f},{adjusted_ro:.2f}\n")
+                f.write(
+                    f"{driver},{team},{adjusted_dr:.3f},{adjusted_pr:.2f},{adjusted_ro:.2f}\n"
+                )
 
     print(f"Created driver CSV: {csv_path}")
     return csv_path

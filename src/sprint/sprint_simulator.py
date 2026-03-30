@@ -44,6 +44,8 @@ from simulation.enhanced_long_dist_sim import (
     EnhancedRaceSimulator,
     RaceState,
     DiceRollingLogger,
+    RealTimeLappingDetector,
+    LappingEvent,
     get_team_stabilities,
     get_driver_personality,
     calculate_driver_error_probability,
@@ -56,6 +58,8 @@ from simulation.enhanced_long_dist_sim import (
     roll_d6,
     roll_d10,
     roll_d100,
+    nonlinear_scaling,
+    get_universal_tyre_params_with_cliff,
 )
 
 # Import DRS config reader
@@ -66,29 +70,74 @@ from sprint.starting_grid_connector import StartingGridConnector, GridSourceType
 # SPRINT RACE CONFIGURATION
 # =============================================================================
 
-# Real-world track data for sprint races (100km distance)
+# Main race lap counts to calculate sprint laps (1/3 of main race)
+MAIN_RACE_LAP_COUNTS = {
+    "imola": 63,  # Emilia Romagna GP
+    "austria": 71,  # Red Bull Ring
+    "brazil": 71,  # Sao Paulo GP / Brazil
+    "spain": 66,
+    "monaco": 78,
+    "monza": 53,
+    "bahrain": 57,
+    "australia": 58,
+    "japan": 53,
+    "china": 56,
+    "united states": 56,
+    "mexico": 71,
+    "singapore": 61,
+    "abu dhabi": 58,
+    "canada": 70,
+    "silverstone": 52,
+    "hungary": 70,
+    "belgium": 44,
+    "netherlands": 72,
+    "italy": 53,
+    "france": 53,
+    "azerbaijan": 51,
+}
+
+
+def calculate_sprint_laps(track_name: str) -> int:
+    """
+    Calculate sprint race laps as approximately 1/3 of main race laps.
+    Sprint races are ~100km but should be scaled to main race distance.
+
+    Args:
+        track_name: Name of the track
+
+    Returns:
+        Number of laps for sprint race (min 15 laps, max 30 laps)
+    """
+    track_key = track_name.lower().replace(" ", "_").replace("sao_paulo", "brazil")
+    main_laps = MAIN_RACE_LAP_COUNTS.get(track_key, 66)
+
+    # Sprint laps = 1/3 of main race, rounded
+    sprint_laps = max(15, min(30, round(main_laps / 3)))
+
+    return sprint_laps
+
+
+# Real-world track data for sprint races
+# Sprint laps are now calculated dynamically as 1/3 of main race laps
 SPRINT_TRACKS = {
     "Imola": {
-        "gp_name": "Imola",  # Use Imola for track characteristics
+        "gp_name": "Imola",
         "track_length_km": 4.909,
-        "sprint_laps": 21,  # 100km / 4.909km = 20.37 → 21 laps
-        "base_lap_time": 82.0,  # Estimated base lap time
+        "base_lap_time": 82.0,
         "drs_zones": 2,
         "characteristics": "high_downforce, technical, narrow",
     },
     "Austria": {
         "gp_name": "Austria",
         "track_length_km": 4.318,
-        "sprint_laps": 24,  # 100km / 4.318km = 23.16 → 24 laps
-        "base_lap_time": 68.0,  # Short lap, fast track
+        "base_lap_time": 68.0,
         "drs_zones": 3,
         "characteristics": "high_speed, short_lap, multiple_drs",
     },
     "Sao_Paulo": {
         "gp_name": "Brazil",
         "track_length_km": 4.309,
-        "sprint_laps": 24,  # 100km / 4.309km = 23.21 → 24 laps
-        "base_lap_time": 72.0,  # Anti-clockwise, high altitude
+        "base_lap_time": 72.0,
         "drs_zones": 2,
         "characteristics": "high_altitude, anti_clockwise, overtaking_friendly",
     },
@@ -140,7 +189,8 @@ class SprintRaceSimulator:
         if not self.track_config:
             raise ValueError(f"Unknown sprint track: {track_name}")
 
-        self.num_laps = self.track_config["sprint_laps"]
+        # Calculate sprint laps as 1/3 of main race laps
+        self.num_laps = calculate_sprint_laps(track_name)
         self.base_lap_time = self.track_config["base_lap_time"]
         self.driver_data = driver_data
         self.grid_positions = grid_positions or {}  # From Sprint Qualifying
@@ -169,6 +219,11 @@ class SprintRaceSimulator:
         # Initialize race state
         self.race_state = RaceState(self.num_laps, driver_data, self.dice_logger)
 
+        # Initialize real-time lapping detector (FIA-compliant)
+        self.lapping_detector = RealTimeLappingDetector(
+            base_lap_time=self.base_lap_time
+        )
+
         # Sprint race has no mandatory pit stops
         self.pit_stops_disabled = True
 
@@ -184,9 +239,14 @@ class SprintRaceSimulator:
         Returns:
             Dictionary containing race results and metadata
         """
+        # Calculate approximate distance
+        track_length_km = self.track_config["track_length_km"] if self.track_config else 5.0
+        distance_km = round(self.num_laps * track_length_km)
+        
         print(f"\n{'=' * 60}")
         print(f"SPRINT RACE - {self.track_name}")
-        print(f"Laps: {self.num_laps} | Distance: ~100km")
+        print(f"Laps: {self.num_laps} (~1/3 of main race) | Distance: ~{distance_km}km")
+        print(f"Pit Stops: DISABLED (weather/safety car only)")
         print(f"{'=' * 60}")
 
         # Load and display DRS config
@@ -210,6 +270,11 @@ class SprintRaceSimulator:
                 "Incidents": [],
                 "laps_completed": 0,
                 "interval": 0.0,
+                # FIA Lapping fields (real-time tracking)
+                "laps_down": 0,  # Number of laps behind the leader
+                "is_lapped": False,  # Whether driver has been lapped
+                "actual_laps": 0,  # Actual physical laps completed
+                "effective_laps": 0,  # Effective laps for classification
             }
 
         # Set initial grid positions from Sprint Qualifying if available
@@ -257,19 +322,37 @@ class SprintRaceSimulator:
 
     def _simulate_lap(self, lap: int) -> None:
         """Simulate a single lap for all drivers."""
-        # Sort drivers by current cumulative time (race order)
-        sorted_drivers = sorted(self.cumulative_times.items(), key=lambda x: x[1])
+        # Sort drivers by laps completed (desc), then cumulative time (asc)
+        sorted_drivers = sorted(
+            self.cumulative_times.items(),
+            key=lambda x: (-self.results[x[0]]["laps_completed"], x[1]),
+        )
 
         for position, (driver, _) in enumerate(sorted_drivers, 1):
             driver_info = self.driver_data[driver]
-            r_value = driver_info.get("R_Value", 300)
             dr_value = driver_info.get("DR_Value", 0)
+            team_pr = driver_info.get("PR_Value", 300)
+            r_value = dr_value * team_pr / 100.0  # Calculate R value
 
             # Calculate base lap time
-            base_time = calculate_base_lap_time(r_value, self.track_name.lower())
+            track_gp_key = (
+                self.track_config["gp_name"].lower()
+                if self.track_config and "gp_name" in self.track_config
+                else self.track_name.lower()
+            )
+            base_time = calculate_base_lap_time(dr_value, team_pr, track_gp_key)
 
             # Add random variation based on DR value
-            std = calculate_dr_based_std(dr_value, 0, 100, base_std=0.3)
+            std_result = calculate_dr_based_std(
+                dr_value,
+                0,
+                100,
+                base_std=0.3,
+                team_pr=team_pr,
+                pr_min=285.0,
+                pr_max=310.0,
+            )
+            std = std_result[0] if isinstance(std_result, tuple) else std_result
             variation = np.random.normal(0, std)
 
             # Add track characteristics effect
@@ -303,6 +386,12 @@ class SprintRaceSimulator:
                     details={"lap_time": round(lap_time, 3)},
                 )
 
+            # Update actual laps and effective laps
+            self.results[driver]["actual_laps"] += 1
+            self.results[driver]["effective_laps"] = (
+                self.results[driver]["actual_laps"] - self.results[driver]["laps_down"]
+            )
+
             # Random dice roll for minor incidents (1% chance per lap)
             incident_roll = roll_d100()
             if incident_roll <= 1:
@@ -327,14 +416,50 @@ class SprintRaceSimulator:
                     details={"time_loss": round(time_loss, 3)},
                 )
 
+        # Real-time lapping detection (FIA-compliant)
+        # Create temporary results with cumulative_time for lapping detection
+        temp_results = {}
+        for driver in self.driver_data.keys():
+            temp_results[driver] = {
+                "cumulative_time": self.cumulative_times[driver],
+                "laps_completed": self.results[driver]["laps_completed"],
+            }
+
+        lapping_events = self.lapping_detector.detect_lapping(
+            results=temp_results,
+            current_lap=lap,
+            safety_car_active=False,  # Sprint races rarely have safety cars
+        )
+
+        # Process lapping events
+        for event in lapping_events:
+            # Update results with lapping information
+            self.results[event.lapped_driver]["laps_down"] = event.laps_down
+            self.results[event.lapped_driver]["is_lapped"] = True
+            self.results[event.lapped_driver]["effective_laps"] = (
+                self.results[event.lapped_driver]["actual_laps"] - event.laps_down
+            )
+
+            if event.laps_down > 0:
+                print(
+                    f"  [LAPPING - Lap {lap}] {event.leader} laps {event.lapped_driver} "
+                    f"(+{event.laps_down} Lap{'s' if event.laps_down > 1 else ''})"
+                )
+
         # Update positions based on cumulative times
         self._update_positions()
 
     def _update_positions(self) -> None:
-        """Update race positions based on laps completed (desc) then cumulative times (asc)."""
+        """Update race positions based on effective_laps (desc) then cumulative times (asc)."""
+        # FIA-compliant: sort by effective_laps (desc), then cumulative_time (asc)
         sorted_drivers = sorted(
             self.cumulative_times.items(),
-            key=lambda x: (-self.results[x[0]]["laps_completed"], x[1]),
+            key=lambda x: (
+                -self.results[x[0]].get(
+                    "effective_laps", self.results[x[0]]["laps_completed"]
+                ),
+                x[1],
+            ),
         )
         for position, (driver, _) in enumerate(sorted_drivers, 1):
             self.results[driver]["Position"] = position
@@ -343,40 +468,66 @@ class SprintRaceSimulator:
         """Calculate final race results with intervals."""
         for driver in self.driver_data.keys():
             self.results[driver]["TotalTime"] = self.cumulative_times[driver]
+            # Ensure effective_laps is calculated correctly
+            actual_laps = self.results[driver]["actual_laps"]
+            laps_down = self.results[driver]["laps_down"]
+            self.results[driver]["effective_laps"] = actual_laps - laps_down
 
-        # Sort by laps_completed (desc), then cumulative_time (asc)
+        # FIA-compliant final ranking with real-time lapping detection
+        # Use effective_laps (actual_laps - laps_down) for classification
+        # This ensures drivers who completed more effective laps rank higher
         sorted_results = sorted(
             self.results.items(),
-            key=lambda x: (-x[1]["laps_completed"], x[1]["TotalTime"]),
+            key=lambda x: (
+                -x[1].get("effective_laps", x[1]["laps_completed"]),  # Descending
+                x[1]["TotalTime"],  # Ascending
+            ),
         )
 
         # Calculate intervals (gap to leader)
         leader_time = None
+        leader_effective_laps = None
         for position, (driver, result) in enumerate(sorted_results, 1):
+            effective_laps = result.get("effective_laps", result["laps_completed"])
+
             if position == 1:
                 # Leader has no interval (or 0.0)
                 result["interval"] = 0.0
                 leader_time = result["TotalTime"]
+                leader_effective_laps = effective_laps
             else:
-                # Calculate gap to leader
-                result["interval"] = result["TotalTime"] - leader_time
+                # Check if this driver is lapped compared to leader
+                if leader_effective_laps and effective_laps < leader_effective_laps:
+                    laps_down = leader_effective_laps - effective_laps
+                    result["interval"] = float("inf")  # Mark as lapped
+                else:
+                    # Calculate gap to leader
+                    result["interval"] = result["TotalTime"] - leader_time
 
             # Update position
             result["Position"] = position
 
     def _get_final_positions(self) -> Dict[int, str]:
         """Get final positions as position -> driver mapping."""
+        # FIA-compliant: sort by effective_laps (desc), then TotalTime (asc)
         sorted_results = sorted(
             self.results.items(),
-            key=lambda x: (-x[1]["laps_completed"], x[1]["TotalTime"]),
+            key=lambda x: (
+                -x[1].get("effective_laps", x[1]["laps_completed"]),
+                x[1]["TotalTime"],
+            ),
         )
         return {pos: driver for pos, (driver, _) in enumerate(sorted_results, 1)}
 
     def _award_sprint_points(self) -> None:
         """Award sprint race points to top 8 finishers."""
+        # FIA-compliant: sort by effective_laps (desc), then TotalTime (asc)
         sorted_results = sorted(
             self.results.items(),
-            key=lambda x: (-x[1]["laps_completed"], x[1]["TotalTime"]),
+            key=lambda x: (
+                -x[1].get("effective_laps", x[1]["laps_completed"]),
+                x[1]["TotalTime"],
+            ),
         )
 
         for i, (driver, _) in enumerate(sorted_results[:8], 0):
@@ -411,7 +562,17 @@ class SprintRaceSimulator:
                     else "N/A",
                     "Points": data["Points"],
                     "LapsCompleted": data["laps_completed"],
-                    "Interval": f"+{data['interval']:.3f}" if data["interval"] > 0 else "0.000",
+                    "EffectiveLaps": data.get("effective_laps", data["laps_completed"]),
+                    "ActualLaps": data.get("actual_laps", data["laps_completed"]),
+                    "LapsDown": data.get("laps_down", 0),
+                    "IsLapped": "Yes" if data.get("is_lapped", False) else "No",
+                    "Interval": f"+{data['interval']:.3f}"
+                    if data["interval"] > 0 and data["interval"] != float("inf")
+                    else "0.000"
+                    if data["interval"] == 0
+                    else f"+{data.get('laps_down', 0)} Lap"
+                    if data.get("laps_down", 0) == 1
+                    else f"+{data.get('laps_down', 0)} Laps",
                 }
                 for driver, data in sorted(
                     self.results.items(), key=lambda x: x[1]["Position"]
@@ -444,8 +605,8 @@ class SprintRaceSimulator:
             "",
             "## Final Results",
             "",
-            "| Position | Driver | Team | Grid | Total Time | Interval | Laps | Best Lap | Points |",
-            "|----------|--------|------|------|------------|----------|------|----------|--------|",
+            "| Position | Driver | Team | Grid | Total Time | Interval | Laps | Effective | Laps Down | Best Lap | Points |",
+            "|----------|--------|------|------|------------|----------|------|-----------|-----------|----------|--------|",
         ]
 
         for driver, data in sorted(
@@ -454,11 +615,27 @@ class SprintRaceSimulator:
             best_lap = (
                 f"{data['BestLap']:.3f}" if data["BestLap"] != float("inf") else "N/A"
             )
-            interval_str = f"+{data['interval']:.3f}s" if data["interval"] > 0 else "0.000s"
+
+            # Format interval string
+            if data["interval"] == 0:
+                interval_str = "0.000s"
+            elif data["interval"] == float("inf") or data.get("laps_down", 0) > 0:
+                laps_down = data.get("laps_down", 0)
+                interval_str = (
+                    f"+{laps_down} Lap" if laps_down == 1 else f"+{laps_down} Laps"
+                )
+            else:
+                interval_str = f"+{data['interval']:.3f}s"
+
+            effective_laps = data.get("effective_laps", data["laps_completed"])
+            actual_laps = data.get("actual_laps", data["laps_completed"])
+            laps_down = data.get("laps_down", 0)
+            laps_down_str = f"+{laps_down}" if laps_down > 0 else "-"
+
             lines.append(
                 f"| {data['Position']} | {data['Driver']} | {data['Team']} | "
                 f"{data['GridPosition']} | {data['TotalTime']:.3f}s | {interval_str} | "
-                f"{data['laps_completed']} | {best_lap}s | {data['Points']} |"
+                f"{actual_laps} | {effective_laps} | {laps_down_str} | {best_lap}s | {data['Points']} |"
             )
 
         lines.extend(
@@ -529,42 +706,50 @@ def run_sprint_race(
         drivers = get_drivers()
         teams = get_teams()
 
-        # Create driver data dict with R_Value and DR_Value ratings
-        # R_Value: overall race rating (base 300 + skill)
-        # DR_Value: delta rating relative to teammate
+        # Load team PR values for this track (fallback handled in config loader)
+        from src.utils.config_loader import get_all_teams_pr
+
+        team_pr_values = get_all_teams_pr(track_name)
+
+        # Driver DR baseline aligned with race-weekend pipeline
+        dr_baseline = {
+            "Verstappen": 100.5,
+            "Perez": 99.925,
+            "Hamilton": 100.4,
+            "Russell": 100.0,
+            "Leclerc": 100.4,
+            "Sainz": 99.95,
+            "Gasly": 100.1,
+            "Tsunoda": 99.85,
+            "Alonso": 100.5,
+            "Ocon": 99.85,
+            "Vettel": 100.3,
+            "Stroll": 99.7,
+            "Grosjean": 100.1,
+            "Schwartzman": 99.6,
+            "Norris": 100.1,
+            "Ricciardo": 99.875,
+            "Bottas": 100.2,
+            "Zhou": 99.65,
+            "Magnussen": 100.1,
+            "Schumacher": 99.675,
+            "Albon": 100.1,
+            "Latifi": 99.625,
+        }
+
+        # Create driver data dict with DR and PR consistent with main race simulation
         driver_data = {}
         for driver in drivers:
             team = teams.get(driver, "Unknown")
-            # Assign R_Value based on driver tier
-            # Top drivers get higher values
-            if driver in ["Verstappen", "Leclerc", "Hamilton"]:
-                r_value = 320.0
-            elif driver in ["Norris", "Russell", "Alonso"]:
-                r_value = 315.0
-            elif driver in ["Sainz", "Ricciardo", "Gasly"]:
-                r_value = 310.0
-            elif driver in ["Perez", "Ocon", "Bottas"]:
-                r_value = 305.0
-            elif driver in ["Tsunoda", "Stroll", "Vettel"]:
-                r_value = 300.0
-            elif driver in ["Albon", "Magnussen", "Schumacher"]:
-                r_value = 295.0
-            elif driver in ["Latifi", "Zhou", "Grosjean", "Schwartzman"]:
-                r_value = 290.0
-            else:
-                r_value = 300.0
-
-            # DR_Value: delta to teammate (random but consistent)
-            # Use deterministic hash (md5) of driver name for consistency
-            import hashlib
-
-            dr_hash = int(hashlib.md5(driver.encode()).hexdigest(), 16)
-            dr_value = 25.0 + (dr_hash % 20)
+            dr_value = dr_baseline.get(driver, 99.5)
+            team_pr = team_pr_values.get(team, 300.0)
+            r_value = dr_value * team_pr / 100.0
 
             driver_data[driver] = {
                 "Team": team,
                 "R_Value": r_value,
                 "DR_Value": dr_value,
+                "PR_Value": team_pr,
             }
 
     # Create simulator and run race

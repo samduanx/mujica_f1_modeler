@@ -99,9 +99,11 @@ class StrategistIntegration:
 
     def update_context(
         self,
+        track_name: str,
         current_lap: int,
         total_laps: int,
         race_position: int,
+        pit_stops_completed: int,
         tyre_life: int,
         current_tyre: str,
         is_wet: bool = False,
@@ -113,9 +115,11 @@ class StrategistIntegration:
         Update the race context for strategist decisions.
 
         Args:
+            track_name: Current track name
             current_lap: Current race lap
             total_laps: Total race laps
             race_position: Current race position
+            pit_stops_completed: Number of completed pit stops
             tyre_life: Laps remaining on current tyre
             current_tyre: Current tyre compound
             is_wet: Whether track is wet
@@ -133,7 +137,7 @@ class StrategistIntegration:
             pressure_level = 1  # End of race
 
         self.state.current_context = RaceContext(
-            track_name="Unknown",  # Set by simulation
+            track_name=track_name,
             current_lap=current_lap,
             total_laps=total_laps,
             is_wet=is_wet,
@@ -141,6 +145,7 @@ class StrategistIntegration:
             is_sc_active=is_sc_active,
             is_vsc_active=is_vsc_active,
             race_position=race_position,
+            pit_stops_completed=pit_stops_completed,
             current_tyre=current_tyre,
             tyre_life=tyre_life,
             pressure_level=pressure_level,
@@ -151,6 +156,9 @@ class StrategistIntegration:
         self,
         context: RaceContext,
         is_undercut: bool = False,
+        last_pit_lap: int = 0,
+        is_weather_related: bool = False,
+        weather_pits_count: int = 0,
     ) -> Dict[str, Any]:
         """
         Hook for pit stop timing decisions.
@@ -160,14 +168,20 @@ class StrategistIntegration:
         Args:
             context: Current race context
             is_undercut: Whether this is an undercut attempt
+            last_pit_lap: Lap of last pit stop
+            is_weather_related: Whether this is a weather-triggered pit
+            weather_pits_count: Number of weather pits already done
 
         Returns:
             Decision result dictionary
         """
-        decision, optimal_lap = decide_pit_timing(
+        decision, optimal_lap, is_allowed, reason = decide_pit_timing(
             self.strategist,
             context,
             is_undercut=is_undercut,
+            last_pit_lap=last_pit_lap,
+            is_weather_related=is_weather_related,
+            weather_pits_count=weather_pits_count,
         )
 
         self.state.add_decision(decision)
@@ -175,6 +189,8 @@ class StrategistIntegration:
         return {
             "decision": decision,
             "optimal_pit_lap": optimal_lap,
+            "is_allowed": is_allowed,
+            "reason": reason,
             "modifier_total": decision.modifier,
             "roll": decision.roll,
             "outcome": decision.outcome.value,

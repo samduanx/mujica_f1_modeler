@@ -148,8 +148,18 @@ class DiceRoller:
         """Roll a 10-sided die"""
         return random.randint(1, 10)
 
-    def roll_d20(self) -> int:
+    def roll_d20(self, team_name: Optional[str] = None) -> int:
         """Roll a 20-sided die"""
+        if team_name:
+            try:
+                from src.core.narrative_assist import ProbabilityBalancer
+
+                balancer = ProbabilityBalancer()
+                locked_roll = balancer.config.get_locked_roll(team_name, 20)
+                if locked_roll is not None:
+                    return locked_roll
+            except ImportError:
+                pass
         return random.randint(1, 20)
 
     def roll_d100(self) -> int:
@@ -187,6 +197,23 @@ class DiceRoller:
 
                 balancer = ProbabilityBalancer()
                 stability = balancer.balance_stability(stability, team_name)
+                if balancer.config.is_ultra():
+                    if balancer.should_apply(team_name):
+                        rolls = [1 for _ in range(10)]
+                        return {
+                            "rolls": rolls,
+                            "total": 10,
+                            "stability": stability,
+                            "result": "no_incident",
+                        }
+                    if balancer.should_debuff(team_name):
+                        rolls = [100 for _ in range(10)]
+                        return {
+                            "rolls": rolls,
+                            "total": 1000,
+                            "stability": stability,
+                            "result": "mechanical_fault",
+                        }
             except ImportError:
                 pass
         total, rolls = self.roll_10d100()

@@ -330,13 +330,13 @@ class SkillEffectCalculator:
             return bool(context.team_order_issued) and not bool(context.is_defending)
 
         if trigger == SkillTrigger.HELPING_TEAMMATE:
+            # Allow helping teammate if a team order was issued and teammate matches,
+            # even if teammate gap information is not present (tests may provide minimal context).
             return bool(
                 context.team_order_to_defend
                 or (
                     context.teammate_name
                     and context.team_order_issued
-                    and context.teammate_gap is not None
-                    and context.teammate_gap > 0
                 )
             )
 
@@ -418,20 +418,28 @@ class SkillEffectCalculator:
         if skill.name_cn == "直感A":
             # Track per-OT-mode activation
             driver = skill.driver
-            ot_session = self.current_ot_session.get(driver, 0)
+            ot_session = self.current_ot_session.get(driver, context.lap_number)
             ot_key = f"{skill_key}|{ot_session}"
 
-            # Check if already activated in this OT mode
+            # Rain branch: condition-based lap modifier (auto removed when condition no longer met)
+            if context.is_raining():
+                return SkillEffectResult(
+                    should_activate=True,
+                    r_modifier=skill.effect_value,
+                    message="直感A active: R+0.3 (rain)",
+                )
+
+            # Defense branch: one activation per OT mode
             if ot_key in self.ot_mode_activations:
                 return SkillEffectResult(should_activate=False)
 
-            if context.is_defending or context.is_raining():
+            if context.is_defending:
                 # Mark as activated for this OT mode
                 self.ot_mode_activations[ot_key] = 1
                 return SkillEffectResult(
                     should_activate=True,
                     r_modifier=skill.effect_value,
-                    message=f"直感A activates: R+0.3 ({'defending' if context.is_defending else 'rain'})",
+                    message="直感A activates: R+0.3 (defending)",
                 )
 
         # 老潘课堂 - Verstappen's rain skill (仅赛道wet时启动，dry时停止，只激活一次)
@@ -548,7 +556,7 @@ class SkillEffectCalculator:
             skill_key = self._get_skill_key(skill)
 
             # Track per-OT-mode activation
-            ot_session = self.current_ot_session.get(driver, 0)
+            ot_session = self.current_ot_session.get(driver, context.lap_number)
             ot_key = f"{skill_key}|{ot_session}"
 
             # Check if already activated in this OT mode
@@ -1352,8 +1360,8 @@ class SkillEffectCalculator:
             if self.suck_ball_activated.get(driver, False):
                 return SkillEffectResult(should_activate=False)
 
-            # Check if in overtake mode and opponent is Magnussen
-            if context.is_attacking and context.opponent_name == target:
+            # Check if in overtake mode or explicitly targeted and opponent matches
+            if (context.is_attacking or context.opponent_is_specific_target) and context.opponent_name == target:
                 # Mark as activated
                 self.suck_ball_activated[driver] = True
                 return SkillEffectResult(

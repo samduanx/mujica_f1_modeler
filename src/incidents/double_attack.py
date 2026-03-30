@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 from enum import Enum
 import random
 
-from incidents.incident_types import IncidentSeverity
+from .incident_types import IncidentSeverity
 
 
 @dataclass

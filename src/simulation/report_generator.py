@@ -37,25 +37,36 @@ def parse_dice_rolls(csv_path: str) -> List[Dict[str, Any]]:
     return read_csv_file(csv_path)
 
 
+def _to_int(value: Any, default: int = 0) -> int:
+    """Best-effort int conversion for CSV fields."""
+    try:
+        if value is None or value == "":
+            return default
+        return int(float(value))
+    except (ValueError, TypeError):
+        return default
+
+
 def generate_race_summary(race_results: List[Dict[str, Any]]) -> str:
-    """Generate race summary section with gap to car ahead."""
+    """Generate race summary section with gap to car ahead (FIA-compliant)."""
     lines = ["## Race Summary\n"]
 
     if not race_results:
         lines.append("No race results available.\n")
         return "\n".join(lines)
 
+    # FIA-compliant: Show effective_laps and laps_down
     lines.append(
-        "| Position | Driver | Team | Gap | Total Time | Pit Stops | Fault Degradation | Notes |"
+        "| Position | Driver | Team | Gap | Total Time | Laps | Pit Stops | Notes |"
     )
     lines.append(
-        "|----------|--------|------|-----|------------|-----------|-------------------|-------|"
+        "|----------|--------|------|-----|------------|------|-----------|-------|"
     )
 
     # Track info for gap calculation
-    prev_laps_completed = None
+    prev_effective_laps = None
     prev_total_time = None
-    leader_laps_completed = None
+    leader_effective_laps = None
     leader_total_time = None
 
     for i, result in enumerate(race_results):
@@ -64,7 +75,6 @@ def generate_race_summary(race_results: List[Dict[str, Any]]) -> str:
         team = result.get("team", "Unknown")
         total_time = result.get("total_time", "N/A")
         num_pits = result.get("num_pits", "0")
-        degradation = result.get("fault_degradation", "0")
 
         # Check for DNF
         dnf = result.get("dnf", "")
@@ -77,30 +87,55 @@ def generate_race_summary(race_results: List[Dict[str, Any]]) -> str:
         except (ValueError, TypeError):
             time_str = str(total_time)
 
+        # Get FIA-compliant lapping info (effective_laps, actual_laps, laps_down)
+        effective_laps = result.get("effective_laps")
+        actual_laps = result.get("actual_laps")
+        laps_down = _to_int(result.get("laps_down", 0), 0)
+
+        # Fallback for backward compatibility
+        if effective_laps is None:
+            effective_laps = _to_int(result.get("laps_completed", 0), 0)
+        else:
+            effective_laps = _to_int(effective_laps, 0)
+
+        if actual_laps is None:
+            actual_laps = effective_laps
+        else:
+            actual_laps = _to_int(actual_laps, effective_laps)
+
+        # Format laps display
+        if laps_down > 0:
+            laps_str = f"{effective_laps}/{actual_laps} (+{laps_down})"
+        else:
+            laps_str = str(effective_laps)
+
         # Calculate gap to car ahead
         gap_str = ""
         if i == 0:
             # Winner has no gap
             gap_str = "-"
-            try:
-                leader_laps_completed = int(result.get("laps_completed", 0))
-                leader_total_time = float(total_time)
-            except (ValueError, TypeError):
-                leader_laps_completed = 0
-                leader_total_time = 0.0
+            leader_effective_laps = effective_laps
+            leader_total_time = float(total_time) if total_time != "N/A" else 0.0
         else:
             try:
-                current_laps = int(result.get("laps_completed", 0))
                 current_time = float(total_time)
 
                 # Check if this is a lapped car
-                if leader_laps_completed and current_laps < leader_laps_completed:
-                    laps_down = leader_laps_completed - current_laps
-                    gap_str = f"+{laps_down} Lap" if laps_down == 1 else f"+{laps_down} Laps"
-                elif prev_laps_completed and current_laps < prev_laps_completed:
+                if leader_effective_laps and effective_laps < leader_effective_laps:
+                    laps_down_count = leader_effective_laps - effective_laps
+                    gap_str = (
+                        f"+{laps_down_count} Lap"
+                        if laps_down_count == 1
+                        else f"+{laps_down_count} Laps"
+                    )
+                elif prev_effective_laps and effective_laps < prev_effective_laps:
                     # Lapped compared to car ahead but not leader
-                    laps_down = prev_laps_completed - current_laps
-                    gap_str = f"+{laps_down} Lap" if laps_down == 1 else f"+{laps_down} Laps"
+                    laps_down_count = prev_effective_laps - effective_laps
+                    gap_str = (
+                        f"+{laps_down_count} Lap"
+                        if laps_down_count == 1
+                        else f"+{laps_down_count} Laps"
+                    )
                 elif prev_total_time is not None:
                     # Same lap - calculate time gap to car ahead
                     gap_seconds = current_time - prev_total_time
@@ -111,15 +146,14 @@ def generate_race_summary(race_results: List[Dict[str, Any]]) -> str:
                 gap_str = "—"
 
         # Update previous car info for next iteration
+        prev_effective_laps = effective_laps
         try:
-            prev_laps_completed = int(result.get("laps_completed", 0))
             prev_total_time = float(total_time)
         except (ValueError, TypeError):
-            prev_laps_completed = 0
             prev_total_time = 0.0
 
         lines.append(
-            f"| {pos} | {driver} | {team} | {gap_str} | {time_str} | {num_pits} | {degradation} | {notes} |"
+            f"| {pos} | {driver} | {team} | {gap_str} | {time_str} | {laps_str} | {num_pits} | {notes} |"
         )
 
     lines.append("")

@@ -13,7 +13,13 @@ import os
 from pathlib import Path
 from typing import Dict, Optional, List
 
-from src.strategist.strategist_types import StrategistProfile
+from src.strategist.strategist_types import (
+    StrategistProfile,
+    TeamStrategyDecision,
+    DecisionType,
+    TrackSpecificRules,
+    get_track_rules,
+)
 
 
 class StrategistManager:
@@ -33,6 +39,15 @@ class StrategistManager:
         """
         self._strategists: Dict[str, StrategistProfile] = {}
         self._team_strategists: Dict[str, str] = {}  # team -> strategist name
+
+        # Team-level strategy sharing
+        self._team_decisions: Dict[
+            str, List[TeamStrategyDecision]
+        ] = {}  # team -> decisions
+        self._team_drivers: Dict[str, List[str]] = {}  # team -> list of driver names
+
+        # Track-specific rules
+        self._track_rules: Dict[str, TrackSpecificRules] = {}
 
         # Determine JSON path
         if json_path is None:
@@ -205,6 +220,190 @@ class StrategistManager:
         if strategist:
             current = strategist.track_familiarity.get(track_name, 0)
             strategist.track_familiarity[track_name] = current + races
+
+    # ============== Team-Level Strategy Sharing ==============
+
+    def register_team_drivers(self, team: str, drivers: List[str]) -> None:
+        """
+        Register the drivers for a team.
+
+        Args:
+            team: Team name
+            drivers: List of driver names in the team
+        """
+        self._team_drivers[team] = drivers
+
+    def get_teammates(self, team: str, driver: str) -> List[str]:
+        """
+        Get the teammates for a driver.
+
+        Args:
+            team: Team name
+            driver: Driver name
+
+        Returns:
+            List of teammates (excluding the driver)
+        """
+        team_drivers = self._team_drivers.get(team, [])
+        return [d for d in team_drivers if d != driver]
+
+    def record_team_decision(
+        self,
+        team: str,
+        decision_type: DecisionType,
+        decision: any,
+        primary_driver: str,
+        current_lap: int,
+    ) -> TeamStrategyDecision:
+        """
+        Record a team-level strategy decision.
+
+        When a strategist makes a decision for one driver, it should be
+        recorded so the same decision can be applied to the teammate.
+
+        Args:
+            team: Team name
+            decision_type: Type of decision made
+            decision: The actual strategy decision
+            primary_driver: Driver for whom the decision was originally made
+            current_lap: Current race lap
+
+        Returns:
+            The recorded team strategy decision
+        """
+        team_decision = TeamStrategyDecision(
+            team=team,
+            decision_type=decision_type,
+            decision=decision,
+            primary_driver=primary_driver,
+            lap_decided=current_lap,
+            applied_to=[primary_driver],
+        )
+
+        if team not in self._team_decisions:
+            self._team_decisions[team] = []
+
+        self._team_decisions[team].append(team_decision)
+
+        return team_decision
+
+    def get_pending_team_decisions(
+        self,
+        team: str,
+        driver: str,
+        current_lap: int,
+    ) -> List[TeamStrategyDecision]:
+        """
+        Get pending team decisions that should be applied to a driver.
+
+        Args:
+            team: Team name
+            driver: Driver name
+            current_lap: Current race lap
+
+        Returns:
+            List of pending team decisions for this driver
+        """
+        if team not in self._team_decisions:
+            return []
+
+        pending = []
+        for decision in self._team_decisions[team]:
+            # Check if decision hasn't expired
+            if decision.is_expired(current_lap):
+                continue
+            # Check if decision hasn't been applied to this driver yet
+            if decision.is_applied_to(driver):
+                continue
+            # Check if decision is from teammate (not self)
+            if decision.primary_driver == driver:
+                continue
+
+            pending.append(decision)
+
+        return pending
+
+    def apply_team_decision(
+        self,
+        team: str,
+        decision: TeamStrategyDecision,
+        driver: str,
+    ) -> None:
+        """
+        Mark a team decision as applied to a driver.
+
+        Args:
+            team: Team name
+            decision: The team decision to mark as applied
+            driver: Driver who the decision was applied to
+        """
+        decision.apply_to_driver(driver)
+
+    def clear_expired_team_decisions(self, current_lap: int) -> None:
+        """
+        Remove expired team decisions.
+
+        Args:
+            current_lap: Current race lap
+        """
+        for team in self._team_decisions:
+            self._team_decisions[team] = [
+                d for d in self._team_decisions[team]
+                if not d.is_expired(current_lap)
+            ]
+
+    def reset_team_decisions(self) -> None:
+        """Clear all team decisions (for new race)."""
+        self._team_decisions.clear()
+        self._team_drivers.clear()
+
+    # ============== Track-Specific Rules ==============
+
+    def get_track_rules(self, track_name: str) -> TrackSpecificRules:
+        """
+        Get track-specific rules for a track.
+
+        Args:
+            track_name: Name of the track
+
+        Returns:
+            TrackSpecificRules for the track
+        """
+        if track_name not in self._track_rules:
+            self._track_rules[track_name] = get_track_rules(track_name)
+        return self._track_rules[track_name]
+
+    def is_pit_allowed(
+        self,
+        track_name: str,
+        current_lap: int,
+        last_pit_lap: int,
+        pit_stops_completed: int,
+        is_weather_related: bool = False,
+        weather_pits_count: int = 0,
+    ) -> tuple[bool, str]:
+        """
+        Check if a pit stop is allowed based on track rules.
+
+        Args:
+            track_name: Name of the track
+            current_lap: Current race lap
+            last_pit_lap: Lap of last pit stop
+            pit_stops_completed: Number of pit stops already completed
+            is_weather_related: Whether this is a weather-triggered pit
+            weather_pits_count: Number of weather pits already done
+
+        Returns:
+            Tuple of (allowed, reason)
+        """
+        rules = self.get_track_rules(track_name)
+        return rules.is_pit_allowed(
+            current_lap=current_lap,
+            last_pit_lap=last_pit_lap,
+            pit_stops_completed=pit_stops_completed,
+            is_weather_related=is_weather_related,
+            weather_pits_count=weather_pits_count,
+        )
 
 
 # Global strategist manager instance

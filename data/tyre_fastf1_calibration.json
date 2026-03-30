@@ -1,0 +1,70 @@
+{
+  "source": "FastF1 cached race laps + Pirelli-informed defaults",
+  "cache_path": "f1_cache",
+  "sessions_used": [
+    "2024 Bahrain",
+    "2024 Monaco",
+    "2024 Spain",
+    "2024 Italy"
+  ],
+  "pace_delta_seconds": {
+    "HARD": 0.317,
+    "MEDIUM": 0.0,
+    "SOFT": -0.292,
+    "C1": 0.42,
+    "C2": 0.24,
+    "C3": 0.0,
+    "C4": -0.22,
+    "C5": -0.44
+  },
+  "tyre_params": {
+    "HARD": {
+      "base_lap": 24,
+      "base_degradation": 0.036,
+      "cliff_lap": 24,
+      "cliff_severity": 0.15
+    },
+    "MEDIUM": {
+      "base_lap": 20,
+      "base_degradation": 0.042,
+      "cliff_lap": 19,
+      "cliff_severity": 0.16
+    },
+    "SOFT": {
+      "base_lap": 16,
+      "base_degradation": 0.048,
+      "cliff_lap": 15,
+      "cliff_severity": 0.17
+    },
+    "C1": {
+      "base_lap": 29,
+      "base_degradation": 0.028,
+      "cliff_lap": 30,
+      "cliff_severity": 0.14
+    },
+    "C2": {
+      "base_lap": 24,
+      "base_degradation": 0.036,
+      "cliff_lap": 24,
+      "cliff_severity": 0.15
+    },
+    "C3": {
+      "base_lap": 20,
+      "base_degradation": 0.042,
+      "cliff_lap": 19,
+      "cliff_severity": 0.16
+    },
+    "C4": {
+      "base_lap": 16,
+      "base_degradation": 0.048,
+      "cliff_lap": 15,
+      "cliff_severity": 0.17
+    },
+    "C5": {
+      "base_lap": 13,
+      "base_degradation": 0.046,
+      "cliff_lap": 13,
+      "cliff_severity": 0.19
+    }
+  }
+}

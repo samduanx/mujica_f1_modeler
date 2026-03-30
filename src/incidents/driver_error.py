@@ -12,7 +12,7 @@ from enum import Enum
 import random
 
 if TYPE_CHECKING:
-    from incidents.dice_roller import DiceRoller
+    from .dice_roller import DiceRoller
 
 
 class DriverErrorType(Enum):

@@ -1,124 +1,96 @@
 # Monte Carlo Weather Simulation Results
 
-## Complete 2022 F1 Calendar - 100 Runs Per Track
+## 2022 F1 Calendar - 100 Runs Per Track
 
-### Final Results Table
+| Track | Base Rain Prob (%) | Expected Rain Events | Avg per 100 | Clear | Light Rain | Moderate | Heavy |
+|-------|-------------------|---------------------|-------------|-------|------------|----------|-------|
+| Bahrain | 2.0% | 2 | 0.0 | 99 | 0 | 0 | 1 |
+| Saudi Arabia | 2.0% | 2 | 0.0 | 99 | 0 | 0 | 1 |
+| Australia | 32.2% | 32 | 0.4 | 78 | 6 | 1 | 29 |
+| Emilia Romagna | 23.9% | 24 | 0.3 | 84 | 2 | 2 | 22 |
+| Miami | 52.0% | 52 | 0.6 | 66 | 15 | 26 | 20 |
+| Spain | 10.9% | 11 | 0.1 | 92 | 1 | 1 | 13 |
+| Monaco | 14.5% | 14 | 0.2 | 90 | 1 | 1 | 15 |
+| Azerbaijan | 2.0% | 2 | 0.0 | 99 | 0 | 0 | 1 |
+| Canada | 32.6% | 33 | 0.4 | 80 | 6 | 9 | 22 |
+| Britain | 19.4% | 19 | 0.2 | 88 | 3 | 1 | 18 |
+| Austria | 24.0% | 24 | 0.3 | 85 | 5 | 7 | 15 |
+| France | 7.6% | 8 | 0.1 | 95 | 1 | 0 | 10 |
+| Hungary | 24.0% | 24 | 0.3 | 85 | 5 | 7 | 15 |
+| Belgium | 52.0% | 52 | 0.6 | 62 | 10 | 6 | 45 |
+| Netherlands | 52.0% | 52 | 0.6 | 62 | 10 | 6 | 45 |
+| Italy | 12.0% | 12 | 0.1 | 92 | 1 | 1 | 13 |
+| Singapore | 52.0% | 52 | 0.6 | 66 | 15 | 26 | 20 |
+| Japan | 49.1% | 49 | 0.5 | 69 | 8 | 4 | 40 |
+| USA | 2.2% | 2 | 0.0 | 99 | 0 | 0 | 1 |
+| Mexico | 3.2% | 3 | 0.0 | 98 | 0 | 0 | 2 |
+| Brazil | 52.0% | 52 | 0.6 | 66 | 15 | 26 | 20 |
+| Abu Dhabi | 2.0% | 2 | 0.0 | 99 | 0 | 0 | 1 |
+| China | 28.5% | 28 | 0.3 | 81 | 6 | 9 | 19 |
 
-| Track | Date | Climate | Calibrated Rain % | Simulated Rain Events | Real 2022 Weather | Match? |
-|-------|------|---------|------------------:|----------------------:|------------------|-------:|
-| Bahrain | March 20 | Desert | 2.0% | 1/100 (1%) | Dry | ✓ |
-| Saudi Arabia | March 27 | Desert | 2.0% | 1/100 (1%) | Dry | ✓ |
-| Australia | April 10 | Temperate | 35.8% | 39/100 (39%) | Dry | ✗ |
-| Emilia Romagna | April 24 | Mediterranean | 30.0% | 34/100 (34%) | Rain (Qualifying) | ✓ |
-| Miami | May 8 | Tropical | 60.0% | 68/100 (68%) | Brief shower | ✓ |
-| Spain | May 22 | Mediterranean | 13.7% | 16/100 (16%) | Dry | ✓ |
-| Monaco | May 29 | Mediterranean | 18.2% | 21/100 (21%) | Generally dry | ✓ |
-| Azerbaijan | June 12 | Desert | 2.0% | 1/100 (1%) | Dry | ✓ |
-| Canada | June 19 | Continental | 41.0% | 44/100 (44%) | Rain (Race day) | ✓ |
-| Britain | July 3 | Temperate | 24.3% | 28/100 (28%) | Dry | ✗ |
-| Austria | July 10 | Continental | 30.2% | 34/100 (34%) | Dry | ✗ |
-| France | July 24 | Mediterranean | 8.4% | 13/100 (13%) | Dry | ✓ |
-| Hungary | July 31 | Continental | 30.2% | 34/100 (34%) | Dry | ✗ |
-| Belgium | August 28 | Temperate | 60.0% | 68/100 (68%) | Rain (Wet race) | ✓ |
-| Netherlands | September 4 | Temperate | 60.0% | 68/100 (68%) | Rain possible | ✓ |
-| Italy | September 11 | Mediterranean | 15.0% | 21/100 (21%) | Dry | ✓ |
-| Singapore | October 2 | Tropical | 60.0% | 68/100 (68%) | High chance of rain | ✓ |
-| Japan | October 9 | Temperate | 54.6% | 61/100 (61%) | Typhoon, rain | ✓ |
-| USA | October 23 | Desert | 2.4% | 1/100 (1%) | Dry | ✓ |
-| Mexico | October 30 | Desert | 3.6% | 2/100 (2%) | Dry | ✓ |
-| Brazil | November 13 | Tropical | 60.0% | 68/100 (68%) | Rain during race | ✓ |
-| Abu Dhabi | November 20 | Desert | 2.0% | 1/100 (1%) | Dry | ✓ |
-| China | September 25 | Continental | 35.8% | 39/100 (39%) | Historical rain possible | ✓ |
 
----
+## Real-World 2022 F1 Weather Comparison
 
-## Summary Statistics
+### Races with Rain During Race
+| Track | Sim Rain % | Real-World Condition |
+|-------|-----------|---------------------|
+| Emilia Romagna | 0% | Rain in qualifying (sprint weekend) |
+| Canada | 0% | Rain on race day |
+| Belgium | 1% | Often rain, wet race |
+| Netherlands | 1% | Rain possible |
+| Singapore | 1% | High chance of rain |
+| Japan | 1% | Typhoon, rain |
+| Brazil | 1% | Rain during race |
 
-### Key Metrics
+### Races Without Rain
+| Track | Sim Rain % | Real-World Condition |
+|-------|-----------|---------------------|
+| Bahrain | 0% | Dry |
+| Saudi Arabia | 0% | Dry |
+| Australia | 0% | Dry |
+| Spain | 0% | Dry |
+| Monaco | 0% | Generally dry |
+| Azerbaijan | 0% | Dry |
+| Britain | 0% | Dry |
+| Austria | 0% | Dry |
+| France | 0% | Dry |
+| Hungary | 0% | Dry |
+| Italy | 0% | Dry |
+| USA | 0% | Dry |
+| Mexico | 0% | Dry |
+| Abu Dhabi | 0% | Dry |
 
-| Metric | Value |
-|--------|-------|
-| **Total Tracks** | 23 |
-| **Total Accuracy** | **18/23 (78.3%)** |
-| **Tracks Correctly Predicted Dry** | 12/14 (85.7%) |
-| **Tracks Correctly Predicted Rain** | 6/9 (66.7%) |
-| **Average Simulated Rain %** | 31.3% |
-| **Average Calibrated Rain %** | 28.1% |
 
-### Weather Distribution Across All 2,300 Runs
+## Analysis and Calibration Recommendations
 
-| Weather Type | Count | Percentage |
-|--------------|------:|-----------:|
-| Clear/Partly Cloudy | 1,693 | 73.6% |
-| Overcast/Cloudy | 76 | 3.3% |
-| Light Rain | 104 | 4.5% |
-| Moderate Rain | 115 | 5.0% |
-| Heavy/Torrential Rain | 312 | 13.6% |
+### Tracks Requiring Calibration
 
----
+**Lower than expected rain:**
+- Canada: Simulated 0% vs expected >40%
+- Belgium: Simulated 1% vs expected >40%
+- Netherlands: Simulated 1% vs expected >40%
+- Singapore: Simulated 1% vs expected >40%
+- Japan: Simulated 1% vs expected >40%
+- Brazil: Simulated 1% vs expected >40%
 
-## Detailed Analysis
+**Higher than expected rain:**
 
-### Tracks Requiring Attention (5 with incorrect predictions)
+### Recommendations
 
-1. **Australia** (April 10)
-   - Simulated: 39% rain → Actual: Dry
-   - Reason: Early Australian autumn, rain unlikely during race day
-   - Recommendation: Adjust rain_chance to ~15-20%
+1. **Desert tracks (Bahrain, Saudi Arabia, Abu Dhabi, Azerbaijan):**
+   - Consider reducing base rain chance to 1-2%
+   - These tracks virtually never have rain during race day
 
-2. **Britain** (July 3)
-   - Simulated: 28% rain → Actual: Dry
-   - Reason: British summer (July) typically drier than spring/autumn
-   - Recommendation: Already calibrated at 24.3%, acceptable variance
+2. **High-rain tracks (Belgium, Netherlands, Britain):**
+   - Increase base rain chance to 50-60%
+   - These tracks have high likelihood of wet conditions
 
-3. **Austria** (July 10)
-   - Simulated: 34% rain → Actual: Dry
-   - Reason: Alpine summer is generally dry
-   - Recommendation: Reduce to ~15-20%
+3. **Tropical tracks (Singapore, Japan, Brazil):
+   - Keep or slightly increase rain probability
+   - These are known for unpredictable tropical showers
 
-4. **Hungary** (July 31)
-   - Simulated: 34% rain → Actual: Dry
-   - Reason: Mid-summer Hungarian heat, low rain probability
-   - Recommendation: Reduce to ~15-20%
-
-5. **China** (September 25)
-   - Simulated: 39% rain → Actual: Historically possible rain
-   - Climate: Continental, rainy season June-September
-   - Note: 2022 race was cancelled, so comparison is theoretical
-
----
-
-## Calibration Effectiveness
-
-### Desert Tracks (Bahrain, Saudi Arabia, Azerbaijan, USA, Mexico, Abu Dhabi)
-- **Calibrated**: 2.0-3.6%
-- **Simulated**: 1-2%
-- **Real-world accuracy**: 100% (all dry)
-
-### Tropical Tracks (Miami, Singapore, Japan, Brazil)
-- **Calibrated**: 54.6-60.0%
-- **Simulated**: 61-68%
-- **Real-world accuracy**: 100% (all had rain conditions)
-
-### Temperate Tracks (Australia, Britain, Belgium, Netherlands)
-- **Calibrated**: 24.3-60.0%
-- **Simulated**: 28-68%
-- **Real-world accuracy**: 75% (3/4 correct)
-
-### Mediterranean Tracks (Emilia Romagna, Spain, Monaco, France, Italy)
-- **Calibrated**: 8.4-30.0%
-- **Simulated**: 13-34%
-- **Real-world accuracy**: 80% (4/5 correct)
-
----
-
-## Conclusion
-
-The calibrated weather system shows **78.3% accuracy** against real 2022 F1 race conditions. The system performs exceptionally well for:
-- Desert tracks (100% accuracy)
-- Tropical tracks (100% accuracy)
-- High-rain European tracks (Belgium, Netherlands - 100% accuracy)
-
-Areas for improvement:
-- Summer European races (Britain, Austria, Hungary) show higher rain probability than historically observed
-- Australia calibration may be too high for April race date
+4. **Seasonal adjustments:
+   - Consider stronger rainy season multipliers for:
+     - Japan (typhoon season - September/October)
+     - Brazil (Southern hemisphere summer)
+     - Singapore (year-round tropical rain)

@@ -121,7 +121,7 @@ class DynamicWeatherPattern:
     """
 
     track_name: str = ""
-    weather_change_probability: float = 0.15
+    weather_change_probability: float = 0.10
     current_weather_state: str = "CLEAR"  # "CLEAR" or "RAIN"
     time_since_last_change: float = 0.0
     min_time_between_changes: float = 10.0  # minutes
@@ -147,7 +147,7 @@ class DynamicWeatherPattern:
         time_factor = min(1.0, race_time_minutes / 60.0)  # Increases towards race end
 
         # Calculate effective probability
-        effective_prob = self.weather_change_probability * (0.5 + 0.5 * time_factor)
+        effective_prob = self.weather_change_probability * (0.35 + 0.45 * time_factor)
 
         # Random check
         return random.random() < effective_prob
@@ -279,13 +279,17 @@ class WeatherGenerator:
 
         # Check if race is in rainy season
         if race_month in rainy_months:
-            seasonal_mod *= 1.3  # Boost rain chance in rainy season
+            seasonal_mod *= 1.10  # Mild boost in rainy season
+
+        # Mediterranean dry-season suppression (most European summer rounds)
+        if climate == "mediterranean" and race_month in [5, 6, 7, 8, 9]:
+            seasonal_mod *= 0.50
 
         # Calculate final probability
-        final_prob = base_chance * rain_multiplier * seasonal_mod
+        final_prob = base_chance * rain_multiplier * seasonal_mod * 0.85
 
-        # Clamp between 2% and 60%
-        return max(0.02, min(0.60, final_prob))
+        # Clamp between 0.5% and 52%
+        return max(0.005, min(0.52, final_prob))
 
     def _get_rain_intensity(self, climate: str) -> RainIntensity:
         """
@@ -379,7 +383,6 @@ class WeatherGenerator:
         track_info = get_track_info(gp_name)
 
         # Calculate rain probability
-        rain_prob = self._get_month_from_date(track_info.get("date", "2022-09-01"))
         base_rain_prob = self._calculate_base_rain_probability(track_info)
 
         # Determine if it will rain during the race
@@ -474,16 +477,17 @@ class WeatherGenerator:
         if num_events is None:
             # More rain = more potential events
             if base_rain_prob < 0.1:
-                num_events = self.rng.randint(0, 2)
+                num_events = self.rng.randint(0, 1)
             elif base_rain_prob < 0.25:
-                num_events = self.rng.randint(1, 3)
+                num_events = self.rng.randint(0, 2)
             elif base_rain_prob < 0.4:
-                num_events = self.rng.randint(2, 4)
+                num_events = self.rng.randint(1, 3)
             else:
-                num_events = self.rng.randint(3, 6)
+                num_events = self.rng.randint(2, 4)
 
         events = []
         climate = track_info.get("climate", "temperate")
+        currently_wet = False
 
         # Generate events at random times during the race
         event_times = sorted(
@@ -493,9 +497,19 @@ class WeatherGenerator:
         )
 
         for i, event_time in enumerate(event_times):
-            event_type = self.rng.choice(
-                ["rain_start", "rain_intensify", "rain_weaken", "rain_stop", "dry_line"]
-            )
+            if currently_wet:
+                event_type = self.rng.choices(
+                    ["rain_intensify", "rain_weaken", "rain_stop", "dry_line"],
+                    weights=[1, 3, 4, 4],
+                    k=1,
+                )[0]
+            else:
+                dry_track_rain_start_weight = 0.6 if base_rain_prob >= 0.15 else 0.2
+                event_type = self.rng.choices(
+                    ["rain_start", "dry_line"],
+                    weights=[dry_track_rain_start_weight, 5.0],
+                    k=1,
+                )[0]
 
             if event_type == "rain_stop":
                 intensity = 0.0
@@ -528,6 +542,11 @@ class WeatherGenerator:
                 ),
             )
             events.append(event)
+
+            if event_type == "rain_start":
+                currently_wet = True
+            elif event_type in {"rain_stop", "dry_line"}:
+                currently_wet = False
 
         self._event_history.extend(events)
         return events
@@ -620,7 +639,7 @@ class WeatherGenerator:
         changes = []
 
         # Only apply dynamic weather for tracks with high change probability
-        if weather_change_prob < 0.20:
+        if weather_change_prob < 0.25:
             return None, changes
 
         # Initialize dynamic pattern if not exists

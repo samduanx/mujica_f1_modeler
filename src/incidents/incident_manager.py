@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 import random
 import time
 
-from incidents.incident_types import (
+from .incident_types import (
     IncidentType,
     Incident,
     IncidentSeverity,
@@ -17,23 +17,23 @@ from incidents.incident_types import (
     IncidentStatistics,
     TrackDifficulty,
 )
-from incidents.vehicle_fault import (
+from .vehicle_fault import (
     TeamStability,
     VehicleFaultResolver,
     get_team_stability,
 )
-from incidents.driver_error import (
+from .driver_error import (
     DriverErrorType,
     DriverError,
     DriverErrorResolver,
     DriverErrorProbability,
 )
-from incidents.overtake_incident import (
+from .overtake_incident import (
     OvertakeCollision,
     OvertakeIncidentProbability,
     OvertakeSituation,
 )
-from incidents.double_attack import (
+from .double_attack import (
     DoubleAttackSystem,
     DoubleAttackResult,
     DoubleAttackSimulator,

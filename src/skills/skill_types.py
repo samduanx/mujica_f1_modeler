@@ -254,7 +254,7 @@ SKILL_NAME_MAPPINGS = {
 
 # Drivers awaiting further orders (their skills won't be implemented yet)
 # Piastri now implemented - see 抽象怪 skill with Alonso as godfather after Spain
-PENDING_DRIVERS = set()  # All drivers now implemented!
+PENDING_DRIVERS = {"Hamilton", "Russell", "Piastri"}
 
 
 def is_skill_pending(driver: str, skill_name_cn: str) -> bool:

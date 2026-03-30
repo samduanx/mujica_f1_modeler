@@ -209,8 +209,9 @@ RACE_CALENDAR_2022 = {
         "lon": 2.2611,
         "temp_range": (18, 28),
         "humidity": (40, 65),
-        "rain_chance": 0.15,
-        "rainy_months": [3, 4, 5, 9, 10, 11],
+        "rain_chance": 0.05,
+        "rainy_months": [3, 4, 10, 11],
+        "weather_change_probability": 0.05,
     },
     "Monaco": {
         "date": "2022-05-29",

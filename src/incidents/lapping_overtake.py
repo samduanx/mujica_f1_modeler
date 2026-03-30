@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 import random
 
-from drs.overtake import OvertakeConfrontation, OvertakeSituation, ConfrontationResult
+from src.drs.overtake import OvertakeConfrontation, OvertakeSituation, ConfrontationResult
 
 
 # Section suitability for lapping overtakes (how easy it is for lapped car to give way)
@@ -211,7 +211,7 @@ class LappingOvertake(OvertakeConfrontation):
         score = 0.7
 
         # Bonus for immediate compliance (on WARNING vs FINAL)
-        from incidents.blue_flag import BlueFlagState
+        from .blue_flag import BlueFlagState
 
         if blue_flag_state == BlueFlagState.WARNING:
             score += 0.2  # Complied early
@@ -235,7 +235,7 @@ class LappingOvertake(OvertakeConfrontation):
         if blue_flag_complied:
             return 0.0
 
-        from incidents.blue_flag import ResistanceLevel
+        from .blue_flag import ResistanceLevel
 
         resistance_scores = {
             ResistanceLevel.NONE: 0.0,
@@ -261,7 +261,7 @@ class LappingOvertake(OvertakeConfrontation):
         Returns:
             Tuple of (success, violation, penalty)
         """
-        from incidents.blue_flag import ResistanceLevel
+        from .blue_flag import ResistanceLevel
 
         # Leader may still get by depending on resistance level and DR values
         leader_dr = getattr(leader, "dr_value", 85)
@@ -301,7 +301,7 @@ class LappingOvertake(OvertakeConfrontation):
 
     def _determine_penalty(self, resistance_level) -> str:
         """Determine penalty based on resistance level"""
-        from incidents.blue_flag import ResistanceLevel
+        from .blue_flag import ResistanceLevel
 
         penalties = {
             ResistanceLevel.MINOR: "warning_logged",
@@ -333,7 +333,7 @@ class LappingOvertake(OvertakeConfrontation):
         violation: bool,
     ) -> str:
         """Create narrative for resistance scenario"""
-        from incidents.blue_flag import ResistanceLevel
+        from .blue_flag import ResistanceLevel
 
         narratives = {
             ResistanceLevel.MINOR: f"{lapped_name} hesitates briefly before letting {leader_name} through",
@@ -371,7 +371,7 @@ class LappingOvertake(OvertakeConfrontation):
         Returns:
             Modifier value (+3 to +5 for leader if complied, 0 otherwise)
         """
-        from incidents.blue_flag import BlueFlagState
+        from .blue_flag import BlueFlagState
 
         if not blue_flag_complied:
             return 0.0

@@ -9,7 +9,7 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
-from incidents.vsc_sc import SafetyCarManager
+from .vsc_sc import SafetyCarManager
 
 
 class UnlappingState(Enum):

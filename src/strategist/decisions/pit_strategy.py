@@ -15,6 +15,8 @@ from src.strategist.strategist_types import (
     DecisionType,
     OutcomeLevel,
     TRACK_PIT_LOSS,
+    TrackSpecificRules,
+    get_track_rules,
 )
 from src.strategist.dice_mechanics import StrategistDiceRoller
 
@@ -23,12 +25,44 @@ from src.strategist.dice_mechanics import StrategistDiceRoller
 TYRE_COMPOUNDS = ["SOFT", "MEDIUM", "HARD", "INTER", "WET"]
 
 
+def check_pit_eligibility(
+    context: RaceContext,
+    last_pit_lap: int = 0,
+    is_weather_related: bool = False,
+    weather_pits_count: int = 0,
+) -> Tuple[bool, str]:
+    """
+    Check if a pit stop is allowed based on track-specific rules.
+
+    Args:
+        context: Current race context
+        last_pit_lap: Lap of last pit stop
+        is_weather_related: Whether this is a weather-triggered pit
+        weather_pits_count: Number of weather pits already done
+
+    Returns:
+        Tuple of (allowed, reason)
+    """
+    track_rules = get_track_rules(context.track_name)
+
+    return track_rules.is_pit_allowed(
+        current_lap=context.current_lap,
+        last_pit_lap=last_pit_lap,
+        pit_stops_completed=context.pit_stops_completed,
+        is_weather_related=is_weather_related,
+        weather_pits_count=weather_pits_count,
+    )
+
+
 def decide_pit_timing(
     strategist: StrategistProfile,
     context: RaceContext,
     is_undercut: bool = False,
     is_stacked: bool = False,
-) -> Tuple[StrategyDecision, Optional[int]]:
+    last_pit_lap: int = 0,
+    is_weather_related: bool = False,
+    weather_pits_count: int = 0,
+) -> Tuple[StrategyDecision, Optional[int], bool, str]:
     """
     Decide when to make a pit stop.
 
@@ -37,11 +71,36 @@ def decide_pit_timing(
         context: Current race context
         is_undercut: Whether this is an undercut attempt
         is_stacked: Whether pit stops are stacked
+        last_pit_lap: Lap of last pit stop
+        is_weather_related: Whether this is a weather-triggered pit
+        weather_pits_count: Number of weather pits already done
 
     Returns:
-        Tuple of (StrategyDecision, optimal_pit_lap)
+        Tuple of (StrategyDecision, optimal_pit_lap, is_allowed, reason)
     """
     roller = StrategistDiceRoller(strategist)
+
+    # First check if pit is allowed based on track rules
+    is_allowed, reason = check_pit_eligibility(
+        context=context,
+        last_pit_lap=last_pit_lap,
+        is_weather_related=is_weather_related,
+        weather_pits_count=weather_pits_count,
+    )
+
+    # If pit is not allowed (except for weather emergencies), return early
+    if not is_allowed and not is_weather_related:
+        decision = StrategyDecision(
+            decision_type=DecisionType.PIT_TIMING,
+            roll=0,
+            modifier=0,
+            final_value=0,
+            outcome=OutcomeLevel.FAILURE,
+            description=f"Pit stop not allowed: {reason}",
+        )
+        return decision, None, False, reason
+
+    # Make the decision
     decision = roller.roll_pit_timing(context, is_undercut, is_stacked)
 
     # Calculate optimal pit lap based on decision outcome
@@ -62,7 +121,7 @@ def decide_pit_timing(
     else:  # Critical failure
         optimal_lap = context.current_lap + 5
 
-    return decision, optimal_lap
+    return decision, optimal_lap, is_allowed, reason
 
 
 def select_tyre_compound(

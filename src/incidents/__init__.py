@@ -8,38 +8,38 @@ This module provides comprehensive incident handling including:
 - Double-attack scenarios
 """
 
-from incidents.incident_types import (
+from .incident_types import (
     IncidentType,
     Incident,
     IncidentSeverity,
 )
-from incidents.incident_manager import IncidentManager
-from incidents.vehicle_fault import (
+from .incident_manager import IncidentManager
+from .vehicle_fault import (
     TeamStability,
     ComponentFault,
     VehicleFaultResolver,
 )
-from incidents.driver_error import (
+from .driver_error import (
     DriverErrorType,
     DriverError,
     DriverErrorProbability,
     DriverErrorResolver,
 )
-from incidents.overtake_incident import (
+from .overtake_incident import (
     OvertakeIncidentProbability,
     OvertakeCollision,
 )
-from incidents.double_attack import (
+from .double_attack import (
     DoubleAttackSystem,
     DoubleAttackConfrontation,
 )
-from incidents.sector_flags import (
+from .sector_flags import (
     SectorFlag,
     SectorFlagState,
     SectorFlagManager,
     YellowFlagImpact,
 )
-from incidents.vsc_sc import (
+from .vsc_sc import (
     VSCConfig,
     SafetyCarConfig,
     VSCManager,
@@ -47,7 +47,7 @@ from incidents.vsc_sc import (
     SafetyResponseManager,
     SafetyCarState,
 )
-from incidents.unlapping import (
+from .unlapping import (
     UnlappingManager,
     UnlappingState,
     RaceControlDecision,
@@ -55,7 +55,7 @@ from incidents.unlapping import (
     IncidentResponseUnlappingManager,
     check_f1_article_55_compliance,
 )
-from incidents.blue_flag import (
+from .blue_flag import (
     BlueFlagState,
     ResistanceLevel,
     LappingDetectionConfig,
@@ -65,18 +65,18 @@ from incidents.blue_flag import (
     LappingPair,
     BlueFlagViolation,
 )
-from incidents.lapping_overtake import (
+from .lapping_overtake import (
     LappingOvertake,
     LappingResult,
     SECTION_SUITABILITY,
 )
-from incidents.dice_roller import (
+from .dice_roller import (
     roll_d10,
     roll_d100,
     roll_d6,
     DiceRoller,
 )
-from incidents.red_flag import (
+from .red_flag import (
     RaceEndReason,
     RaceCompletionStatus,
     RedFlagOutcome,
@@ -87,7 +87,7 @@ from incidents.red_flag import (
     RedFlagRestart,
     RedFlagRepairManager,
 )
-from incidents.rolling_start import (
+from .rolling_start import (
     RollingStartPhase,
     RollingStartConfig,
     RollingStartManager,

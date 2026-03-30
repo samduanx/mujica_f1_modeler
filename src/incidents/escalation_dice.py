@@ -15,8 +15,8 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 from enum import Enum
 
-from incidents.incident_types import IncidentSeverity, Incident
-from incidents.dice_roller import roll_d100, roll_d10, roll_d6
+from .incident_types import IncidentSeverity, Incident
+from .dice_roller import roll_d100, roll_d10, roll_d6
 
 
 class SafetyResponseType(Enum):
@@ -113,16 +113,22 @@ class IncidentEscalationDice:
         Returns:
             SafetyResponse with type, duration, and reason
         """
-        # Roll base response
-        base_roll = roll_d100()
-        severity_mod = self.severity_mods.get_modifier(incident.severity)
-        modified_roll = base_roll + severity_mod
-
-        # Check for escalation from current response
+        # If there's an active response, first check for escalation.
         if current_response != SafetyResponseType.NONE:
             escalate, escalate_reason = self._check_escalation(current_response)
             if escalate:
                 return self._handle_escalation(current_response, escalate_reason)
+            # No escalation -> maintain current response
+            return SafetyResponse(
+                response_type=current_response,
+                reason="No escalation",
+                escalation_roll=roll_d100(),
+            )
+
+        # Roll base response (only when there's no active response)
+        base_roll = roll_d100()
+        severity_mod = self.severity_mods.get_modifier(incident.severity)
+        modified_roll = base_roll + severity_mod
 
         # Determine base response type
         return self._determine_base_response(modified_roll, base_roll, incident)

@@ -24,9 +24,9 @@ except ImportError:
     FASTF1_AVAILABLE = False
     print("Warning: FastF1 not available")
 
-from incidents.red_flag import RedFlagManager, RaceEndReason
-from incidents.sector_flags import SectorFlagManager, SectorFlag
-from incidents.vsc_sc import SafetyResponseManager
+from .red_flag import RedFlagManager, RaceEndReason
+from .sector_flags import SectorFlagManager, SectorFlag
+from .vsc_sc import SafetyResponseManager
 
 
 @dataclass

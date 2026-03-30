@@ -305,7 +305,7 @@ def generate_session_summary(
                     summary_lines.append("")
                     summary_lines.append("| Pos | Driver | Team | Total Time | Pits |")
                     summary_lines.append("|-----|--------|------|------------|------|")
-                    for row in rows[:20]:  # Top 20
+                    for row in rows:
                         try:
                             total_time = float(row.get("total_time", 0))
                             summary_lines.append(
@@ -389,6 +389,39 @@ def generate_race_weekend_report(
     # Session summaries with detailed results
     lines.extend(["## Session Summaries", ""])
 
+    def _render_csv_table(csv_path: str, preferred_columns: List[str]) -> List[str]:
+        table_lines: List[str] = []
+        if not os.path.exists(csv_path):
+            return table_lines
+
+        try:
+            import csv as csv_module
+
+            with open(csv_path, "r", encoding="utf-8") as f:
+                reader = csv_module.DictReader(f)
+                rows = list(reader)
+
+            if not rows:
+                return table_lines
+
+            columns = [c for c in preferred_columns if c in reader.fieldnames]
+            if not columns:
+                columns = list(reader.fieldnames or [])
+
+            table_lines.append("| " + " | ".join(columns) + " |")
+            table_lines.append("|" + "|".join(["---"] * len(columns)) + "|")
+            for row in rows:
+                table_lines.append(
+                    "| "
+                    + " | ".join(str(row.get(col, "")) for col in columns)
+                    + " |"
+                )
+            table_lines.append("")
+        except Exception:
+            return []
+
+        return table_lines
+
     for session in sessions:
         result = session_results.get(session, {})
         status = result.get("status", "unknown")
@@ -439,6 +472,17 @@ def generate_race_weekend_report(
                         lines.append(f"| {driver} | {delta:+.2f} |")
                     lines.append("")
 
+            fp_results_csv = os.path.join(
+                session_dir, f"{session}_results_{track_name.lower()}.csv"
+            )
+            fp_table = _render_csv_table(
+                fp_results_csv,
+                ["Driver", "Team", "Best Lap (s)", "Laps Completed", "R Delta"],
+            )
+            if fp_table:
+                lines.extend(["**Full Session Results:**", ""])
+                lines.extend(fp_table)
+
         elif session == "qualifying" and status == "completed":
             grid_positions = result.get("grid_positions", {})
             pole_sitter = result.get("pole_sitter")
@@ -469,6 +513,17 @@ def generate_race_weekend_report(
                 )
                 lines.append("")
 
+            qual_csv = os.path.join(
+                session_dir, f"qualifying_results_{track_name.lower()}.csv"
+            )
+            qual_table = _render_csv_table(
+                qual_csv,
+                ["position", "driver", "team", "q1_time", "q2_time", "q3_time", "best_time"],
+            )
+            if qual_table:
+                lines.extend(["**Full Qualifying Table:**", ""])
+                lines.extend(qual_table)
+
         elif session == "sprint" and status == "completed":
             final_positions = result.get("final_positions", {})
             if final_positions:
@@ -484,46 +539,31 @@ def generate_race_weekend_report(
             lines.append("")
 
         elif session == "race" and status == "completed":
-            # Try to read detailed race results from session summary
-            race_summary_path = os.path.join(session_dir, "session_summary_race.md")
-            if os.path.exists(race_summary_path):
-                try:
-                    with open(race_summary_path, "r", encoding="utf-8") as f:
-                        summary_content = f.read()
-                    # Extract the results table from the summary
-                    in_results_section = False
-                    for line in summary_content.split("\n"):
-                        if "## Results" in line:
-                            in_results_section = True
-                            continue
-                        if in_results_section:
-                            if (
-                                line.strip().startswith("**")
-                                and "Race Results:" not in line
-                            ):
-                                break
-                            if line.strip():
-                                lines.append(line)
-                    lines.append("")
-                except Exception as e:
-                    # Fallback to CSV links if reading fails
-                    lines.extend(["**Race Results:**", ""])
-                    lines.extend(
-                        [
-                            f"- [Race Results CSV](race/race_results_{gp_name.lower()}.csv)",
-                            f"- [Dice Rolls CSV](race/dice_rolls_{gp_name.lower()}.csv)",
-                        ]
-                    )
-                    lines.append("")
+            lines.extend(["**Race Results:**", ""])
+            race_csv = os.path.join(session_dir, f"race_results_{track_name.lower()}.csv")
+            race_table = _render_csv_table(
+                race_csv,
+                [
+                    "position",
+                    "driver",
+                    "team",
+                    "total_time",
+                    "interval",
+                    "laps_completed",
+                    "num_pits",
+                    "dnf",
+                ],
+            )
+            if race_table:
+                lines.extend(race_table)
             else:
-                lines.extend(["**Race Results:**", ""])
                 lines.extend(
                     [
                         f"- [Race Results CSV](race/race_results_{gp_name.lower()}.csv)",
                         f"- [Dice Rolls CSV](race/dice_rolls_{gp_name.lower()}.csv)",
+                        "",
                     ]
                 )
-                lines.append("")
 
         lines.append("")
 
@@ -587,6 +627,44 @@ def generate_race_weekend_report(
 
 # Global practice session storage (persisted across FP1/FP2/FP3)
 _practice_sessions: Dict[str, Any] = {}
+
+
+def _merge_setup_tuning_deltas(session_deltas: List[Dict[str, float]]) -> Dict[str, float]:
+    """Merge multiple setup tuning delta dicts by averaging per driver."""
+    if not session_deltas:
+        return {}
+
+    merged: Dict[str, List[float]] = {}
+    for deltas in session_deltas:
+        for driver, delta in deltas.items():
+            merged.setdefault(driver, []).append(float(delta))
+
+    return {driver: sum(values) / len(values) for driver, values in merged.items()}
+
+
+def _collect_setup_tuning_deltas(results: Dict[str, dict]) -> Dict[str, float]:
+    """
+    Collect setup tuning deltas from completed practice sessions.
+
+    Priority:
+    1) FP3 parc fermé final deltas (normal weekend)
+    2) Average of available FP setup deltas (FP1/FP2)
+    """
+    fp3 = results.get("fp3") or results.get("practice3")
+    if fp3 and fp3.get("status") == "completed":
+        fp3_deltas = fp3.get("r_rating_deltas", {})
+        if fp3_deltas:
+            return {driver: float(delta) for driver, delta in fp3_deltas.items()}
+
+    session_deltas: List[Dict[str, float]] = []
+    for key in ["fp1", "practice1", "fp2", "practice2"]:
+        session_result = results.get(key)
+        if session_result and session_result.get("status") == "completed":
+            deltas = session_result.get("setup_results", {})
+            if deltas:
+                session_deltas.append(deltas)
+
+    return _merge_setup_tuning_deltas(session_deltas)
 
 
 def _get_driver_ratings(track_name: str) -> Dict[str, float]:
@@ -1266,6 +1344,7 @@ def simulate_qualifying(
 
             # Load team PR values for qualifying performance calculation
             from src.utils.config_loader import get_all_teams_pr
+
             team_pr_values = get_all_teams_pr(track_name)
             max_pr = max(team_pr_values.values()) if team_pr_values else 308.0
 
@@ -1720,7 +1799,7 @@ def _generate_race_report(output_dir: str, track_name: str, gp_name: str) -> Non
             f.write("| Pos | Driver | Team | Total Time | Pits |\n")
             f.write("|-----|--------|------|------------|------|\n")
 
-            for row in results[:20]:
+            for row in results:
                 pos = row.get("position", "")
                 driver = row.get("driver", "")
                 team = row.get("team", "")
@@ -1752,12 +1831,56 @@ def _generate_race_report(output_dir: str, track_name: str, gp_name: str) -> Non
         print(f"Warning: Could not generate race report: {e}")
 
 
+def _generate_weekend_dice_process_file(output_base_dir: str) -> Optional[str]:
+    """Generate a consolidated dice-process CSV across all weekend sessions."""
+    try:
+        import csv
+
+        dice_files = sorted(glob.glob(os.path.join(output_base_dir, "*", "*dice*.csv")))
+        if not dice_files:
+            return None
+
+        rows: List[Dict[str, Any]] = []
+        all_columns = set()
+
+        for file_path in dice_files:
+            session_name = os.path.basename(os.path.dirname(file_path))
+            source_file = os.path.basename(file_path)
+            with open(file_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    merged = {
+                        "session": session_name,
+                        "source_file": source_file,
+                        **row,
+                    }
+                    rows.append(merged)
+                    all_columns.update(merged.keys())
+
+        preferred_prefix = ["session", "source_file", "lap", "driver", "category", "roll_type", "dice_type", "dice_result", "outcome", "race_time"]
+        ordered_columns = [c for c in preferred_prefix if c in all_columns]
+        ordered_columns.extend(sorted(c for c in all_columns if c not in ordered_columns))
+
+        output_path = os.path.join(output_base_dir, "dice_process_all_sessions.csv")
+        with open(output_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=ordered_columns)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({col: row.get(col, "") for col in ordered_columns})
+
+        return output_path
+    except Exception as e:
+        print(f"Warning: Could not generate consolidated dice process file: {e}")
+        return None
+
+
 def simulate_race(
     track_name: str,
     seed: Optional[int] = None,
     output_dir: Optional[str] = None,
     is_race_weekend: bool = False,
     grid_positions: Optional[Dict[str, int]] = None,
+    setup_tuning_deltas: Optional[Dict[str, float]] = None,
     **kwargs,
 ) -> dict:
     """
@@ -1807,7 +1930,11 @@ def simulate_race(
 
     # Create driver CSV file for this track
     # If grid_positions provided from qualifying/sprint, use them
-    csv_path = create_driver_csv(gp_name, grid_positions=grid_positions)
+    csv_path = create_driver_csv(
+        gp_name,
+        grid_positions=grid_positions,
+        setup_tuning_deltas=setup_tuning_deltas,
+    )
 
     # Prepare arguments for the simulation
     sim_args = [f"--gp-name", gp_name, "--csv-file", csv_path]
@@ -1920,9 +2047,13 @@ def run_race_weekend(
         print(f"# Seed: {seed}")
     print(f"{'#' * 70}")
 
-    # Default to all sessions
+    # Default session order
     if sessions is None:
-        sessions = SESSION_TYPES
+        if track_name in SPRINT_TRACKS:
+            # Sprint weekend format required by this project: FP1 -> Q -> FP2 -> SR -> R
+            sessions = ["fp1", "qualifying", "fp2", "sprint", "race"]
+        else:
+            sessions = ["fp1", "fp2", "fp3", "qualifying", "race"]
 
     # Determine if this is a full race weekend (multiple sessions) or single session
     is_full_weekend = len(sessions) > 1
@@ -2005,14 +2136,25 @@ def run_race_weekend(
                         )
                         print(f"  Using Qualifying results for main race grid")
                 elif session_key == "sprint":
-                    # Sprint Race - get grid positions from Sprint Qualifying if available
+                    # Sprint Race - get grid positions from Qualifying (2022 format)
+                    # 2022 Sprint weekend: FP1 → Qualifying → FP2 → Sprint → Race
+                    # Qualifying determines Sprint Race grid
                     if (
+                        "qualifying" in results
+                        and results["qualifying"].get("status") == "completed"
+                    ):
+                        extra_kwargs["grid_positions"] = results["qualifying"].get(
+                            "grid_positions", {}
+                        )
+                        print(f"  Using Qualifying results for Sprint Race grid")
+                    elif (
                         "sprint_qualifying" in results
                         and results["sprint_qualifying"].get("status") == "completed"
                     ):
-                        extra_kwargs["grid_positions"] = results["sprint_qualifying"].get(
-                            "grid_positions", {}
-                        )
+                        # Fallback to sprint qualifying (for testing purposes)
+                        extra_kwargs["grid_positions"] = results[
+                            "sprint_qualifying"
+                        ].get("grid_positions", {})
                         print(f"  Using Sprint Qualifying results for Sprint Race grid")
                 elif session_key == "sprint_qualifying":
                     # Sprint Qualifying (SQ1/SQ2/SQ3) on Friday
@@ -2035,12 +2177,27 @@ def run_race_weekend(
                 elif session_key == "qualifying":
                     # Normal Qualifying (Q1/Q2/Q3) on Saturday for sprint weekends
                     # This determines the main race grid (when sprint is not used)
+                    setup_deltas = _collect_setup_tuning_deltas(results)
+                    if setup_deltas:
+                        extra_kwargs["setup_tuning_deltas"] = setup_deltas
+                        print(
+                            f"  Passing {len(setup_deltas)} practice setup tuning deltas to Qualifying"
+                        )
+
                     if track_name in SPRINT_TRACKS:
                         print(
                             f"  Qualifying determines main race grid (sprint weekend)"
                         )
                     else:
                         print(f"  Qualifying determines main race grid")
+
+                if session_key == "race":
+                    setup_deltas = _collect_setup_tuning_deltas(results)
+                    if setup_deltas:
+                        extra_kwargs["setup_tuning_deltas"] = setup_deltas
+                        print(
+                            f"  Applying {len(setup_deltas)} practice setup tuning deltas to Race"
+                        )
 
             result = session_map[session_key](
                 track_name,
@@ -2057,9 +2214,13 @@ def run_race_weekend(
         report_path = generate_race_weekend_report(
             track_name, sessions, results, output_base_dir
         )
+        dice_process_path = _generate_weekend_dice_process_file(output_base_dir)
         print(f"\nRace weekend report: {report_path}")
+        if dice_process_path:
+            print(f"Dice process file: {dice_process_path}")
         results["_output_dir"] = output_base_dir
         results["_report_path"] = report_path
+        results["_dice_process_path"] = dice_process_path
 
     return results
 
