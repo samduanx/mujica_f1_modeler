@@ -7,6 +7,7 @@ This module contains the basic lap modelling functionality:
 - Narrative assistance for story-driven simulations
 """
 
+
 def _load_fastest_lap_emu():
     """Lazy-load fastest_lap_emu to avoid heavy side effects at package import time."""
     from . import fastest_lap_emu
@@ -28,6 +29,7 @@ def calculate_lap_time(*args, **kwargs):
 
 def simulate_race(*args, **kwargs):
     return _load_fastest_lap_emu().simulate_race(*args, **kwargs)
+
 
 # Import narrative assistance
 from .narrative_assist import (

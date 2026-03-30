@@ -125,8 +125,12 @@ def analyze_race():
     fastest_avg = min(driver_stats, key=lambda x: x["avg_lap"])
     slowest_avg = max(driver_stats, key=lambda x: x["avg_lap"])
 
-    print(f"\nFastest driver: {fastest_avg['driver']} (avg: {fastest_avg['avg_lap']:.2f}s)")
-    print(f"Slowest driver: {slowest_avg['driver']} (avg: {slowest_avg['avg_lap']:.2f}s)")
+    print(
+        f"\nFastest driver: {fastest_avg['driver']} (avg: {fastest_avg['avg_lap']:.2f}s)"
+    )
+    print(
+        f"Slowest driver: {slowest_avg['driver']} (avg: {slowest_avg['avg_lap']:.2f}s)"
+    )
 
     lap_time_diff_per_lap = slowest_avg["avg_lap"] - fastest_avg["avg_lap"]
     print(f"\nLap time difference per lap: {lap_time_diff_per_lap:.2f}s")
@@ -141,14 +145,20 @@ def analyze_race():
         theoretical_laps_behind = 0
 
     print(f"Total time gap: {time_gap:.2f}s")
-    print(f"Theoretical laps behind (based on avg lap time): {theoretical_laps_behind:.2f}")
+    print(
+        f"Theoretical laps behind (based on avg lap time): {theoretical_laps_behind:.2f}"
+    )
 
     print("\n--- Actual Lap Count Check ---")
 
     laps_completed_set = set(int(r["laps_completed"]) for r in race_results)
 
     if len(laps_completed_set) == 1:
-        print("WARNING: All drivers completed {} laps!".format(list(laps_completed_set)[0]))
+        print(
+            "WARNING: All drivers completed {} laps!".format(
+                list(laps_completed_set)[0]
+            )
+        )
         print("    This indicates no lap deficits were calculated.")
     else:
         print("OK: Lap counts vary: {}".format(laps_completed_set))
@@ -198,7 +208,9 @@ def analyze_race():
     if all_same_laps:
         print("BUG CONFIRMED: All drivers completed the same number of laps (71)")
         print("   Despite significant rating differences, no lap deficits are present.")
-        print("   Expected behavior: Slower drivers should be lapped by faster drivers.")
+        print(
+            "   Expected behavior: Slower drivers should be lapped by faster drivers."
+        )
         print("   Actual behavior: Everyone completes same laps, only time gap varies.")
     else:
         print("OK: Lap deficits are being calculated correctly.")
@@ -251,16 +263,19 @@ DRIVER_RATINGS = {
 NUM_LAPS = 71
 AUSTRIA_BASE_LAP_TIME = 68.0
 
+
 def read_csv(filepath):
     with open(filepath, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         return list(reader)
+
 
 def calculate_theoretical_lap_time(dr_value, base_lap_time=68.0):
     r_value = dr_value * 3.0
     adjustment = (r_value - 300.0) * 0.01
     lap_time = base_lap_time - adjustment
     return lap_time
+
 
 def analyze_race():
     print("=" * 70)
@@ -284,7 +299,9 @@ def analyze_race():
         driver_lap_times[driver] = times
 
     print("\n--- Driver Performance Analysis ---")
-    print(f"{'Driver':<15} {'Rating':<8} {'Fastest':<8} {'Avg':<8} {'Slowest':<8} {'Total Time':<12} {'Laps':<6}")
+    print(
+        f"{'Driver':<15} {'Rating':<8} {'Fastest':<8} {'Avg':<8} {'Slowest':<8} {'Total Time':<12} {'Laps':<6}"
+    )
     print("-" * 70)
 
     driver_stats = []
@@ -318,15 +335,21 @@ def analyze_race():
             }
         )
 
-        print(f"{driver:<15} {dr_value:<8.2f} {fastest:<8.2f} {avg:<8.2f} {slowest:<8.2f} {total_time:<12.2f} {laps_completed:<6}")
+        print(
+            f"{driver:<15} {dr_value:<8.2f} {fastest:<8.2f} {avg:<8.2f} {slowest:<8.2f} {total_time:<12.2f} {laps_completed:<6}"
+        )
 
     print("\n--- Theoretical Lap Count Analysis ---")
 
     fastest_avg = min(driver_stats, key=lambda x: x["avg_lap"])
     slowest_avg = max(driver_stats, key=lambda x: x["avg_lap"])
 
-    print(f"\nFastest driver: {fastest_avg['driver']} (avg: {fastest_avg['avg_lap']:.2f}s)")
-    print(f"Slowest driver: {slowest_avg['driver']} (avg: {slowest_avg['avg_lap']:.2f}s)")
+    print(
+        f"\nFastest driver: {fastest_avg['driver']} (avg: {fastest_avg['avg_lap']:.2f}s)"
+    )
+    print(
+        f"Slowest driver: {slowest_avg['driver']} (avg: {slowest_avg['avg_lap']:.2f}s)"
+    )
 
     lap_time_diff_per_lap = slowest_avg["avg_lap"] - fastest_avg["avg_lap"]
     print(f"\nLap time difference per lap: {lap_time_diff_per_lap:.2f}s")
@@ -341,18 +364,26 @@ def analyze_race():
         theoretical_laps_behind = 0
 
     print(f"Total time gap: {time_gap:.2f}s")
-    print(f"Theoretical laps behind (based on avg lap time): {theoretical_laps_behind:.2f}")
+    print(
+        f"Theoretical laps behind (based on avg lap time): {theoretical_laps_behind:.2f}"
+    )
 
     print("\n--- Actual Lap Count Check ---")
     laps_completed_set = set(int(r["laps_completed"]) for r in race_results)
     if len(laps_completed_set) == 1:
-        print("WARNING: All drivers completed {} laps!".format(list(laps_completed_set)[0]))
+        print(
+            "WARNING: All drivers completed {} laps!".format(
+                list(laps_completed_set)[0]
+            )
+        )
         print("    This indicates no lap deficits were calculated.")
     else:
         print("OK: Lap counts vary: {}".format(laps_completed_set))
 
     print("\n--- Lap Deficit Calculation Analysis ---")
-    print(f"Formula: laps_down = int(time_gap / avg_lap_time) if time_gap > avg_lap_time * 0.5 else 0")
+    print(
+        f"Formula: laps_down = int(time_gap / avg_lap_time) if time_gap > avg_lap_time * 0.5 else 0"
+    )
     print(f"Using leader's average lap time: {leader_time / NUM_LAPS:.2f}s")
 
     leader = driver_stats[0]
@@ -381,7 +412,9 @@ def analyze_race():
         else:
             status = "ON LEAD LAP"
 
-        print(f"  P{position}: {driver:<15} DR={dr_value:.2f} time_gap={time_gap:>8.2f}s theoretical_deficit={theoretical_deficit:>2} actual={actual_deficit:>2} -> {status}")
+        print(
+            f"  P{position}: {driver:<15} DR={dr_value:.2f} time_gap={time_gap:>8.2f}s theoretical_deficit={theoretical_deficit:>2} actual={actual_deficit:>2} -> {status}"
+        )
 
     print("\n" + "=" * 70)
     print("CONCLUSION")
@@ -393,6 +426,7 @@ def analyze_race():
         print("BUG CONFIRMED: All drivers completed the same number of laps (71)")
     else:
         print("OK: Lap deficits are being calculated correctly.")
+
 
 if __name__ == "__main__":
     analyze_race()

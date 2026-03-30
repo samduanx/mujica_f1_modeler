@@ -146,6 +146,7 @@ class DriverErrorProbability:
         if team_name:
             try:
                 from src.core.narrative_assist import ProbabilityBalancer
+
                 balancer = ProbabilityBalancer()
                 prob = balancer.balance_error_probability(prob, team_name)
             except ImportError:

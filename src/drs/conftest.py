@@ -29,9 +29,27 @@ def _build_minimal_track_config() -> TrackDRSConfig:
         activation_probability=0.95,
     )
 
-    s1 = SectorConfig(sector_number=1, start_distance=0.0, end_distance=1800.0, base_time=25.0, drs_zones=[])
-    s2 = SectorConfig(sector_number=2, start_distance=1800.0, end_distance=3600.0, base_time=27.0, drs_zones=[drs_zone])
-    s3 = SectorConfig(sector_number=3, start_distance=3600.0, end_distance=5793.0, base_time=27.0, drs_zones=[])
+    s1 = SectorConfig(
+        sector_number=1,
+        start_distance=0.0,
+        end_distance=1800.0,
+        base_time=25.0,
+        drs_zones=[],
+    )
+    s2 = SectorConfig(
+        sector_number=2,
+        start_distance=1800.0,
+        end_distance=3600.0,
+        base_time=27.0,
+        drs_zones=[drs_zone],
+    )
+    s3 = SectorConfig(
+        sector_number=3,
+        start_distance=3600.0,
+        end_distance=5793.0,
+        base_time=27.0,
+        drs_zones=[],
+    )
 
     sectors = {1: s1, 2: s2, 3: s3}
 
@@ -40,7 +58,12 @@ def _build_minimal_track_config() -> TrackDRSConfig:
         year=2024,
         total_distance=5793.0,
         sectors=sectors,
-        drs_settings=DRSSettings(enabled_after_lap=2, gain_variation=0.03, minimum_gap_for_drs=1.0, drs_disabled_first_lap=True),
+        drs_settings=DRSSettings(
+            enabled_after_lap=2,
+            gain_variation=0.03,
+            minimum_gap_for_drs=1.0,
+            drs_disabled_first_lap=True,
+        ),
         difficulty="high",
     )
 
@@ -52,7 +75,11 @@ def results() -> Dict:
     track_config = _build_minimal_track_config()
     driver_data = get_reference_driver_data()
     config = IntegratedSimulationConfig(
-        num_laps=20, random_seed=42, enable_drs=True, enable_overtakes=True, verbose=False
+        num_laps=20,
+        random_seed=42,
+        enable_drs=True,
+        enable_overtakes=True,
+        verbose=False,
     )
 
     return run_integrated_simulation(track_config, driver_data, config)

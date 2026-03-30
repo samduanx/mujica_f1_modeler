@@ -2355,7 +2355,9 @@ class EnhancedRaceSimulator:
                 rain_intensity
             )
             initial_weather.track_condition = TrackCondition.WET
-            initial_weather.precipitation_probability = max(15.0, base_rain_chance * 100)
+            initial_weather.precipitation_probability = max(
+                15.0, base_rain_chance * 100
+            )
         else:
             initial_weather.rain_intensity = RainIntensity.NONE
             initial_weather.track_condition = TrackCondition.DRY
@@ -2618,7 +2620,9 @@ class EnhancedRaceSimulator:
         if not non_dnf:
             non_dnf = list(results.items())
 
-        leader_driver, leader_result = min(non_dnf, key=lambda item: item[1]["cumulative_time"])
+        leader_driver, leader_result = min(
+            non_dnf, key=lambda item: item[1]["cumulative_time"]
+        )
         leader_finish_time = float(leader_result["cumulative_time"])
         leader_laps = int(leader_result.get("laps_completed", 0))
 
@@ -2684,7 +2688,9 @@ class EnhancedRaceSimulator:
             if position == 1:
                 result["interval"] = 0.0
             elif result.get("effective_laps", 0) == leader_laps:
-                result["interval"] = float(result.get("cumulative_time", 0.0)) - leader_total_time
+                result["interval"] = (
+                    float(result.get("cumulative_time", 0.0)) - leader_total_time
+                )
             else:
                 result["interval"] = float("nan")
 
@@ -2805,7 +2811,9 @@ class EnhancedRaceSimulator:
         # Check track-specific rules for Monaco/Singapore
         track_rules = get_track_rules(self.track_name)
         team = self.driver_teams.get(driver, "")
-        is_target = self.narrative_config.enabled and self.narrative_config.is_target_team(team)
+        is_target = (
+            self.narrative_config.enabled and self.narrative_config.is_target_team(team)
+        )
         is_opponent = self.narrative_config.enabled and team and not is_target
         weather_pits_done = self.race_state.weather_pits_count.get(driver, 0)
         last_pit_lap = self.race_state.last_weather_pit_decision.get(driver, 0)
@@ -2831,7 +2839,11 @@ class EnhancedRaceSimulator:
             if min_stint_on_weather_tyre > 0:
                 min_stint_on_weather_tyre = max(
                     4,
-                    int(round(min_stint_on_weather_tyre * (1.0 - 0.45 * intensity_factor))),
+                    int(
+                        round(
+                            min_stint_on_weather_tyre * (1.0 - 0.45 * intensity_factor)
+                        )
+                    ),
                 )
         elif is_opponent:
             intensity_factor = self.narrative_config.opponent_debuff
@@ -2842,14 +2854,23 @@ class EnhancedRaceSimulator:
 
         if self.narrative_config.is_ultra():
             if is_target and min_stint_on_weather_tyre > 0:
-                min_stint_on_weather_tyre = max(2, int(round(min_stint_on_weather_tyre * 0.35)))
+                min_stint_on_weather_tyre = max(
+                    2, int(round(min_stint_on_weather_tyre * 0.35))
+                )
             elif is_opponent and min_stint_on_weather_tyre > 0:
                 min_stint_on_weather_tyre = int(round(min_stint_on_weather_tyre * 1.4))
 
-        if min_stint_on_weather_tyre > 0 and laps_since_last_pit < min_stint_on_weather_tyre:
+        if (
+            min_stint_on_weather_tyre > 0
+            and laps_since_last_pit < min_stint_on_weather_tyre
+        ):
             emergency_switch = (
-                (track_condition == TrackCondition.FLOODED and current_tyre == "INTERMEDIATE")
-                or (track_condition == TrackCondition.DRY and current_tyre == "WET" and laps_since_last_pit >= 6)
+                track_condition == TrackCondition.FLOODED
+                and current_tyre == "INTERMEDIATE"
+            ) or (
+                track_condition == TrackCondition.DRY
+                and current_tyre == "WET"
+                and laps_since_last_pit >= 6
             )
             if not emergency_switch:
                 return False, ""
@@ -2885,7 +2906,8 @@ class EnhancedRaceSimulator:
         elif is_opponent:
             max_weather_pits = max(
                 1,
-                max_weather_pits - int(round(1 + self.narrative_config.opponent_debuff)),
+                max_weather_pits
+                - int(round(1 + self.narrative_config.opponent_debuff)),
             )
         if self.narrative_config.is_ultra():
             if is_target:
@@ -3053,7 +3075,9 @@ class EnhancedRaceSimulator:
                         "mistake_gate_roll": start_mistake_gate_roll,
                     },
                 )
-            elif launch_roll == 2 and start_mistake_gate:  # Minor wheelspin - 最多下降1-2位
+            elif (
+                launch_roll == 2 and start_mistake_gate
+            ):  # Minor wheelspin - 最多下降1-2位
                 start_delta += random.uniform(0.15, 0.3)  # 限制损失，约1-2位
                 start_outcome = "wheelspin"
                 self.dice_logger.log_roll(
@@ -3250,7 +3274,9 @@ class EnhancedRaceSimulator:
                 error_roll = roll_d100()
                 team = self.driver_teams.get(driver, "Unknown")
                 team_pr = self.team_pr_values.get(team, 300.0)
-                dr_value = float(self.driver_data.get(driver, {}).get("DR_Value", 100.0))
+                dr_value = float(
+                    self.driver_data.get(driver, {}).get("DR_Value", 100.0)
+                )
                 driver_r_value = dr_value * team_pr / 100.0
                 error_threshold = calculate_driver_error_probability(
                     driver,
@@ -4204,7 +4230,9 @@ class EnhancedRaceSimulator:
             # Update weather for this lap
             race_time_minutes = self.get_relative_time() / 60.0
             weather_effects = self.update_weather_for_lap(lap, race_time_minutes)
-            weather_effects = self._apply_track_water_model(lap, weather_effects, results)
+            weather_effects = self._apply_track_water_model(
+                lap, weather_effects, results
+            )
 
             # Handle race control responses to weather
             weather_rc_event = self.handle_weather_race_control(lap, weather_effects)
@@ -4416,7 +4444,8 @@ class EnhancedRaceSimulator:
                         total_laps=self.num_laps,
                         race_position=driver_result.get("position", 10),
                         pit_stops_completed=completed_pits,
-                        tyre_life=lap - sum(1 for pl in driver_result["pit_laps"] if pl < lap),
+                        tyre_life=lap
+                        - sum(1 for pl in driver_result["pit_laps"] if pl < lap),
                         current_tyre=driver_result["tyre_sequence"][current_idx]
                         if driver_result.get("tyre_sequence")
                         else "MEDIUM",
@@ -4432,13 +4461,16 @@ class EnhancedRaceSimulator:
                         laps_until_end=self.num_laps - lap,
                     )
 
-                    if team_sc_decision and team_sc_decision.get(
-                        "pit_recommendation", False
-                    ) and team_sc_decision.get("recommended_action") in {
-                        "PIT_NOW",
-                        "PIT_NOW_BONUS",
-                        "PIT_OR_STAY",
-                    }:
+                    if (
+                        team_sc_decision
+                        and team_sc_decision.get("pit_recommendation", False)
+                        and team_sc_decision.get("recommended_action")
+                        in {
+                            "PIT_NOW",
+                            "PIT_NOW_BONUS",
+                            "PIT_OR_STAY",
+                        }
+                    ):
                         self._apply_immediate_team_pit(team, lap, results)
 
             # Process safety car laps
@@ -4722,16 +4754,24 @@ class EnhancedRaceSimulator:
                         if self.narrative_config.is_ultra():
                             lap_time *= 0.94
                             if lap_result.get("pit_time", 0.0) > 0:
-                                lap_time = max(1.0, lap_time - max(self._target_pit_bonus_sec * 2.0, 1.5))
+                                lap_time = max(
+                                    1.0,
+                                    lap_time
+                                    - max(self._target_pit_bonus_sec * 2.0, 1.5),
+                                )
                         else:
                             lap_time *= max(0.96, 1.0 - self._target_pace_boost)
                             if lap_result.get("pit_time", 0.0) > 0:
-                                lap_time = max(1.0, lap_time - self._target_pit_bonus_sec)
+                                lap_time = max(
+                                    1.0, lap_time - self._target_pit_bonus_sec
+                                )
                     elif team:
                         if self.narrative_config.is_ultra():
                             lap_time *= 1.03
                             if lap_result.get("pit_time", 0.0) > 0:
-                                lap_time += max(self._opponent_pit_penalty_sec * 1.8, 2.0)
+                                lap_time += max(
+                                    self._opponent_pit_penalty_sec * 1.8, 2.0
+                                )
                         else:
                             lap_time *= 1.0 + self._opponent_pace_penalty
                             if lap_result.get("pit_time", 0.0) > 0:

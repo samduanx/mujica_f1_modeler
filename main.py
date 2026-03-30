@@ -412,9 +412,7 @@ def generate_race_weekend_report(
             table_lines.append("|" + "|".join(["---"] * len(columns)) + "|")
             for row in rows:
                 table_lines.append(
-                    "| "
-                    + " | ".join(str(row.get(col, "")) for col in columns)
-                    + " |"
+                    "| " + " | ".join(str(row.get(col, "")) for col in columns) + " |"
                 )
             table_lines.append("")
         except Exception:
@@ -518,7 +516,15 @@ def generate_race_weekend_report(
             )
             qual_table = _render_csv_table(
                 qual_csv,
-                ["position", "driver", "team", "q1_time", "q2_time", "q3_time", "best_time"],
+                [
+                    "position",
+                    "driver",
+                    "team",
+                    "q1_time",
+                    "q2_time",
+                    "q3_time",
+                    "best_time",
+                ],
             )
             if qual_table:
                 lines.extend(["**Full Qualifying Table:**", ""])
@@ -540,7 +546,9 @@ def generate_race_weekend_report(
 
         elif session == "race" and status == "completed":
             lines.extend(["**Race Results:**", ""])
-            race_csv = os.path.join(session_dir, f"race_results_{track_name.lower()}.csv")
+            race_csv = os.path.join(
+                session_dir, f"race_results_{track_name.lower()}.csv"
+            )
             race_table = _render_csv_table(
                 race_csv,
                 [
@@ -629,7 +637,9 @@ def generate_race_weekend_report(
 _practice_sessions: Dict[str, Any] = {}
 
 
-def _merge_setup_tuning_deltas(session_deltas: List[Dict[str, float]]) -> Dict[str, float]:
+def _merge_setup_tuning_deltas(
+    session_deltas: List[Dict[str, float]],
+) -> Dict[str, float]:
     """Merge multiple setup tuning delta dicts by averaging per driver."""
     if not session_deltas:
         return {}
@@ -1857,9 +1867,22 @@ def _generate_weekend_dice_process_file(output_base_dir: str) -> Optional[str]:
                     rows.append(merged)
                     all_columns.update(merged.keys())
 
-        preferred_prefix = ["session", "source_file", "lap", "driver", "category", "roll_type", "dice_type", "dice_result", "outcome", "race_time"]
+        preferred_prefix = [
+            "session",
+            "source_file",
+            "lap",
+            "driver",
+            "category",
+            "roll_type",
+            "dice_type",
+            "dice_result",
+            "outcome",
+            "race_time",
+        ]
         ordered_columns = [c for c in preferred_prefix if c in all_columns]
-        ordered_columns.extend(sorted(c for c in all_columns if c not in ordered_columns))
+        ordered_columns.extend(
+            sorted(c for c in all_columns if c not in ordered_columns)
+        )
 
         output_path = os.path.join(output_base_dir, "dice_process_all_sessions.csv")
         with open(output_path, "w", newline="", encoding="utf-8") as f:

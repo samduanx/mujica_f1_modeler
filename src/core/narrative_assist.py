@@ -188,9 +188,7 @@ class ProbabilityBalancer:
             return random.randint(1, 20)
 
         shift = (
-            self.config.probability_shift
-            if is_target
-            else self.config.opponent_debuff
+            self.config.probability_shift if is_target else self.config.opponent_debuff
         )
 
         weights = []
@@ -298,7 +296,9 @@ class ProbabilityBalancer:
 
         return base_probability
 
-    def shape_strategy_weights(self, team_name: str, w1: float, w2: float) -> tuple[float, float]:
+    def shape_strategy_weights(
+        self, team_name: str, w1: float, w2: float
+    ) -> tuple[float, float]:
         """Shape 1-stop/2-stop weights based on narrative intensity and team role."""
         if not self.config.enabled:
             return (w1, w2)
@@ -316,11 +316,15 @@ class ProbabilityBalancer:
         p2 = max(0.001, min(0.999, w2 / total))
 
         if self.should_apply(team_name):
-            gamma = 1.0 + (self.config.strategy_bias * (1.8 if self.config.is_ultra() else 1.0))
+            gamma = 1.0 + (
+                self.config.strategy_bias * (1.8 if self.config.is_ultra() else 1.0)
+            )
             p1 = p1**gamma
             p2 = p2**gamma
         elif self.should_debuff(team_name):
-            gamma = 1.0 + self.config.strategy_bias * (1.2 if self.config.is_ultra() else 0.6)
+            gamma = 1.0 + self.config.strategy_bias * (
+                1.2 if self.config.is_ultra() else 0.6
+            )
             p1 = (1.0 - p1) ** gamma
             p2 = (1.0 - p2) ** gamma
         else:

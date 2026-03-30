@@ -240,9 +240,11 @@ class SprintRaceSimulator:
             Dictionary containing race results and metadata
         """
         # Calculate approximate distance
-        track_length_km = self.track_config["track_length_km"] if self.track_config else 5.0
+        track_length_km = (
+            self.track_config["track_length_km"] if self.track_config else 5.0
+        )
         distance_km = round(self.num_laps * track_length_km)
-        
+
         print(f"\n{'=' * 60}")
         print(f"SPRINT RACE - {self.track_name}")
         print(f"Laps: {self.num_laps} (~1/3 of main race) | Distance: ~{distance_km}km")

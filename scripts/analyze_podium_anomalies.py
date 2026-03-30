@@ -10,7 +10,9 @@ import sys
 from collections import Counter
 from typing import List, Dict
 
-DETAILED_CSV = "outputs/reports/monte_carlo_weekend_2026-03-27_21-25-57/detailed_runs.csv"
+DETAILED_CSV = (
+    "outputs/reports/monte_carlo_weekend_2026-03-27_21-25-57/detailed_runs.csv"
+)
 TOP_TEAMS = {"Mercedes", "Ferrari", "Red Bull"}
 DRIVERS_JSON = "data/drivers.json"
 
@@ -45,12 +47,20 @@ def analyze_race_csv(race_csv: str) -> Dict[str, str]:
     pos_map = {int(r.get("position", 9999)): r for r in rows if r.get("position")}
     top3 = [pos_map.get(1), pos_map.get(2), pos_map.get(3)]
 
-    dnf_count = sum(1 for r in rows if r.get("status","").lower() not in ("finished","") )
-    incidents = sum(int(r.get("num_incidents", "0") or 0) for r in rows if r.get("num_incidents") is not None)
-    avg_pits = sum(int(r.get("num_pits", "0") or 0) for r in rows)/len(rows)
+    dnf_count = sum(
+        1 for r in rows if r.get("status", "").lower() not in ("finished", "")
+    )
+    incidents = sum(
+        int(r.get("num_incidents", "0") or 0)
+        for r in rows
+        if r.get("num_incidents") is not None
+    )
+    avg_pits = sum(int(r.get("num_pits", "0") or 0) for r in rows) / len(rows)
 
     # grid anomalies: count of top teams starting off inside top5
-    grid_top5 = [r for r in rows if r.get("grid_position") and int(r.get("grid_position"))<=5]
+    grid_top5 = [
+        r for r in rows if r.get("grid_position") and int(r.get("grid_position")) <= 5
+    ]
 
     return {
         "top3_rows": top3,
@@ -87,7 +97,7 @@ def main():
     analyses = []
     for f in flagged:
         race_csv = f.get("race_csv")
-        analysis = analyze_race_csv(race_csv) if race_csv else {"error":"no race_csv"}
+        analysis = analyze_race_csv(race_csv) if race_csv else {"error": "no race_csv"}
         analyses.append((f, analysis))
 
     # Summarize reasons heuristically
@@ -118,28 +128,39 @@ def main():
             reason_notes.append("No clear numeric anomaly - investigate logs")
 
         reasons_counter.update(reason_notes)
-        detailed_reports.append({
-            "experiment": f.get("experiment"),
-            "track": f.get("track"),
-            "seed": f.get("seed"),
-            "podium_drivers": f.get("podium_drivers"),
-            "podium_teams": f.get("podium_teams"),
-            "reasons": "; ".join(reason_notes),
-            "race_csv": f.get("race_csv"),
-            "log_path": f.get("log_path"),
-        })
+        detailed_reports.append(
+            {
+                "experiment": f.get("experiment"),
+                "track": f.get("track"),
+                "seed": f.get("seed"),
+                "podium_drivers": f.get("podium_drivers"),
+                "podium_teams": f.get("podium_teams"),
+                "reasons": "; ".join(reason_notes),
+                "race_csv": f.get("race_csv"),
+                "log_path": f.get("log_path"),
+            }
+        )
 
     # Output summary
     out_dir = os.path.dirname(detailed_csv)
     summary_path = os.path.join(out_dir, "podium_anomalies_summary.csv")
     with open(summary_path, "w", encoding="utf-8", newline="") as f:
-        headers = ["experiment","track","seed","podium_drivers","podium_teams","reasons","race_csv","log_path"]
+        headers = [
+            "experiment",
+            "track",
+            "seed",
+            "podium_drivers",
+            "podium_teams",
+            "reasons",
+            "race_csv",
+            "log_path",
+        ]
         writer = csv.DictWriter(f, fieldnames=headers)
         writer.writeheader()
         writer.writerows(detailed_reports)
 
     print("Reason counts:")
-    for k,v in reasons_counter.most_common():
+    for k, v in reasons_counter.most_common():
         print(f"  {k}: {v}")
 
     print(f"Detailed anomaly report saved to: {summary_path}")

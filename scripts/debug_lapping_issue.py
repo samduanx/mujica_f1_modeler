@@ -33,6 +33,7 @@ print("\n" + "=" * 80)
 print("2. 关键车手圈速对比")
 print("=" * 80)
 
+
 def calc_avg_race_pace(lap_times_row):
     laps = []
     for col in lap_times_row.index:
@@ -41,6 +42,7 @@ def calc_avg_race_pace(lap_times_row):
             if pd.notna(val) and val < 110:
                 laps.append(val)
     return np.mean(laps) if laps else 0
+
 
 lap_times["avg_pace"] = lap_times.apply(calc_avg_race_pace, axis=1)
 lap_times["fastest_lap"] = pd.to_numeric(lap_times["fastest_lap"], errors="coerce")
@@ -74,6 +76,7 @@ print("\n" + "=" * 80)
 print("4. 累计时间差异分析")
 print("=" * 80)
 
+
 def calc_cumulative_times(lap_times_row, max_lap=50):
     cum_times = []
     cum_time = 0
@@ -86,6 +89,7 @@ def calc_cumulative_times(lap_times_row, max_lap=50):
                 cum_times.append((lap_num, cum_time))
     return cum_times
 
+
 print("\n前50圈累计时间对比:")
 ham_row = lap_times[lap_times["driver"] == "Hamilton"]
 ver_row = lap_times[lap_times["driver"] == "Verstappen"]
@@ -96,7 +100,9 @@ if not ham_row.empty and not ver_row.empty:
     ver_cum = calc_cumulative_times(ver_row.iloc[0], 50)
     rus_cum = calc_cumulative_times(rus_row.iloc[0], 50)
 
-    print(f"{ 'Lap':>5} | {'Hamilton':>12} | {'Verstappen':>12} | {'Russell':>12} | {'Gap H-V':>10} | {'Gap H-R':>10}")
+    print(
+        f"{'Lap':>5} | {'Hamilton':>12} | {'Verstappen':>12} | {'Russell':>12} | {'Gap H-V':>10} | {'Gap H-R':>10}"
+    )
     print("-" * 75)
     for i in range(min(len(ham_cum), len(ver_cum), len(rus_cum))):
         lap = ham_cum[i][0]
@@ -108,7 +114,9 @@ if not ham_row.empty and not ver_row.empty:
         marker = ""
         if gap_hv > 90:
             marker = " <<< LAPPED!"
-        print(f"{lap:>5} | {h_time:>12.3f} | {v_time:>12.3f} | {r_time:>12.3f} | {gap_hv:>10.3f} | {gap_hr:>10.3f}{marker}")
+        print(
+            f"{lap:>5} | {h_time:>12.3f} | {v_time:>12.3f} | {r_time:>12.3f} | {gap_hv:>10.3f} | {gap_hr:>10.3f}{marker}"
+        )
 
 print("\n" + "=" * 80)
 print("5. 问题诊断结论")

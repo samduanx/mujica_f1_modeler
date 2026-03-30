@@ -284,7 +284,9 @@ def generate_session_summary(
 
         # For race sessions, try to read and display results from CSV
         if session == "race":
-            csv_path = os.path.join(output_dir, f"race_results_{track_name.lower()}.csv")
+            csv_path = os.path.join(
+                output_dir, f"race_results_{track_name.lower()}.csv"
+            )
             if os.path.exists(csv_path):
                 try:
                     import csv as csv_module
@@ -350,7 +352,9 @@ def generate_session_summary(
 _practice_sessions: Dict[str, Any] = {}
 
 
-def _merge_setup_tuning_deltas(session_deltas: List[Dict[str, float]]) -> Dict[str, float]:
+def _merge_setup_tuning_deltas(
+    session_deltas: List[Dict[str, float]],
+) -> Dict[str, float]:
     """Merge multiple setup tuning delta dicts by averaging per driver."""
     if not session_deltas:
         return {}
@@ -676,7 +680,9 @@ def simulate_fp2(
                     r_delta_val = r_delta.r_rating_delta if r_delta else 0.0
                     best_str = f"{best_time:.3f}" if best_time < float("inf") else ""
                     team = teams.get(driver, "Unknown")
-                    writer.writerow([driver, team, best_str, laps, f"{r_delta_val:+.2f}"])
+                    writer.writerow(
+                        [driver, team, best_str, laps, f"{r_delta_val:+.2f}"]
+                    )
 
             print(f"FP2 results saved to: {results_csv_path}")
 
@@ -769,5 +775,6 @@ def simulate_fp2(
             "track": track_name,
             "error": str(e),
         }
+
 
 # (file continues...)

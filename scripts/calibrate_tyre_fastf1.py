@@ -34,14 +34,54 @@ DEFAULT_PACE = {
 }
 
 DEFAULT_TYRE_PARAMS = {
-    "HARD": {"base_lap": 24, "base_degradation": 0.032, "cliff_lap": 24, "cliff_severity": 0.15},
-    "MEDIUM": {"base_lap": 20, "base_degradation": 0.036, "cliff_lap": 19, "cliff_severity": 0.16},
-    "SOFT": {"base_lap": 16, "base_degradation": 0.041, "cliff_lap": 15, "cliff_severity": 0.17},
-    "C1": {"base_lap": 29, "base_degradation": 0.028, "cliff_lap": 30, "cliff_severity": 0.14},
-    "C2": {"base_lap": 24, "base_degradation": 0.032, "cliff_lap": 24, "cliff_severity": 0.15},
-    "C3": {"base_lap": 20, "base_degradation": 0.036, "cliff_lap": 19, "cliff_severity": 0.16},
-    "C4": {"base_lap": 16, "base_degradation": 0.041, "cliff_lap": 15, "cliff_severity": 0.17},
-    "C5": {"base_lap": 13, "base_degradation": 0.046, "cliff_lap": 13, "cliff_severity": 0.19},
+    "HARD": {
+        "base_lap": 24,
+        "base_degradation": 0.032,
+        "cliff_lap": 24,
+        "cliff_severity": 0.15,
+    },
+    "MEDIUM": {
+        "base_lap": 20,
+        "base_degradation": 0.036,
+        "cliff_lap": 19,
+        "cliff_severity": 0.16,
+    },
+    "SOFT": {
+        "base_lap": 16,
+        "base_degradation": 0.041,
+        "cliff_lap": 15,
+        "cliff_severity": 0.17,
+    },
+    "C1": {
+        "base_lap": 29,
+        "base_degradation": 0.028,
+        "cliff_lap": 30,
+        "cliff_severity": 0.14,
+    },
+    "C2": {
+        "base_lap": 24,
+        "base_degradation": 0.032,
+        "cliff_lap": 24,
+        "cliff_severity": 0.15,
+    },
+    "C3": {
+        "base_lap": 20,
+        "base_degradation": 0.036,
+        "cliff_lap": 19,
+        "cliff_severity": 0.16,
+    },
+    "C4": {
+        "base_lap": 16,
+        "base_degradation": 0.041,
+        "cliff_lap": 15,
+        "cliff_severity": 0.17,
+    },
+    "C5": {
+        "base_lap": 13,
+        "base_degradation": 0.046,
+        "cliff_lap": 13,
+        "cliff_severity": 0.19,
+    },
 }
 
 EVENT_CANDIDATES: List[Tuple[int, List[str]]] = [
@@ -119,7 +159,9 @@ def main() -> int:
 
         laps["LapTimeSeconds"] = laps["LapTime"].dt.total_seconds()
 
-        for (driver, stint, compound), group in laps.groupby(["Driver", "Stint", "Compound"]):
+        for (driver, stint, compound), group in laps.groupby(
+            ["Driver", "Stint", "Compound"]
+        ):
             if group.empty or len(group) < 6:
                 continue
 

@@ -10,7 +10,11 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 import random
 
-from src.drs.overtake import OvertakeConfrontation, OvertakeSituation, ConfrontationResult
+from src.drs.overtake import (
+    OvertakeConfrontation,
+    OvertakeSituation,
+    ConfrontationResult,
+)
 
 
 # Section suitability for lapping overtakes (how easy it is for lapped car to give way)
@@ -220,7 +224,7 @@ class LappingOvertake(OvertakeConfrontation):
 
         # Section modifier
         section_mod = SECTION_SUITABILITY.get(track_section, 0.5)
-        score *= (0.7 + 0.3 * section_mod)  # Section affects how clean the compliance was
+        score *= 0.7 + 0.3 * section_mod  # Section affects how clean the compliance was
 
         return min(1.0, score)
 
@@ -313,7 +317,11 @@ class LappingOvertake(OvertakeConfrontation):
         return penalties.get(resistance_level, "warning_logged")
 
     def _create_compliance_narrative(
-        self, leader_name: str, lapped_name: str, track_section: str, compliance_score: float
+        self,
+        leader_name: str,
+        lapped_name: str,
+        track_section: str,
+        compliance_score: float,
     ) -> str:
         """Create narrative for compliance scenario"""
         if compliance_score >= 0.9:
@@ -349,7 +357,10 @@ class LappingOvertake(OvertakeConfrontation):
         if violation:
             base_narrative += " - blue flag violation noted by Race Control"
 
-        if success and resistance_level in [ResistanceLevel.STRONG, ResistanceLevel.VIOLATION]:
+        if success and resistance_level in [
+            ResistanceLevel.STRONG,
+            ResistanceLevel.VIOLATION,
+        ]:
             base_narrative += f", but {leader_name} eventually forces the pass"
         elif not success:
             base_narrative += f", {leader_name} unable to complete the lap immediately"

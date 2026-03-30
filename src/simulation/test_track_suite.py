@@ -171,11 +171,7 @@ def create_driver_csv(
     csv_path = os.path.join(output_dir, f"{track_name}.csv")
 
     # If file already exists and no dynamic inputs are specified, return the path
-    if (
-        os.path.exists(csv_path)
-        and grid_positions is None
-        and not setup_tuning_deltas
-    ):
+    if os.path.exists(csv_path) and grid_positions is None and not setup_tuning_deltas:
         return csv_path
 
     # Determine driver order - use grid_positions if provided, otherwise default order

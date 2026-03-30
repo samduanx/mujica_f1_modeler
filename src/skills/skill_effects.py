@@ -334,10 +334,7 @@ class SkillEffectCalculator:
             # even if teammate gap information is not present (tests may provide minimal context).
             return bool(
                 context.team_order_to_defend
-                or (
-                    context.teammate_name
-                    and context.team_order_issued
-                )
+                or (context.teammate_name and context.team_order_issued)
             )
 
         if trigger == SkillTrigger.BEHIND_TEAMMATE:
@@ -1361,7 +1358,9 @@ class SkillEffectCalculator:
                 return SkillEffectResult(should_activate=False)
 
             # Check if in overtake mode or explicitly targeted and opponent matches
-            if (context.is_attacking or context.opponent_is_specific_target) and context.opponent_name == target:
+            if (
+                context.is_attacking or context.opponent_is_specific_target
+            ) and context.opponent_name == target:
                 # Mark as activated
                 self.suck_ball_activated[driver] = True
                 return SkillEffectResult(

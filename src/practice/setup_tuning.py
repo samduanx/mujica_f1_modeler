@@ -145,7 +145,9 @@ class SetupDiceRoller:
 
         return self.roll_d6()
 
-    def roll_all_categories(self, driver: Optional[str] = None) -> Dict[SetupCategory, int]:
+    def roll_all_categories(
+        self, driver: Optional[str] = None
+    ) -> Dict[SetupCategory, int]:
         """
         Roll dice for all setup categories.
 
@@ -370,23 +372,23 @@ class SetupEffectCalculator:
 class SetupTuningManager:
     """
     Manages setup tuning for all drivers in a session.
-    
+
     Implements best setup locking mechanism:
     - Tracks best setup results for each driver across multiple sessions
     - If a category achieves the maximum roll (6 = +0.3), it becomes locked
     - Locked categories won't be re-rolled in subsequent sessions
     """
-    
+
     def __init__(self, seed: Optional[int] = None):
         """
         Initialize the setup tuning manager.
-        
+
         Args:
             seed: Optional random seed
         """
         self.roller = SetupDiceRoller(seed)
         self.calculator = SetupEffectCalculator()
-    
+
     def run_setup_session(
         self,
         drivers: List[str],
@@ -394,40 +396,42 @@ class SetupTuningManager:
     ) -> Dict[str, SetupTuningResult]:
         """
         Run setup tuning for all drivers in a session.
-        
+
         If a driver has locked categories (best roll achieved in previous sessions),
         those categories will not be re-rolled.
-        
+
         Args:
             drivers: List of driver names
             session: Session name (FP1, FP2, FP3)
-            
+
         Returns:
             Dictionary mapping drivers to their setup results
         """
         results = {}
-        
+
         for driver in drivers:
             # Check for locked categories before rolling
             locked_cats = self.roller.get_locked_categories(driver)
             if locked_cats:
                 locked_str = ", ".join([c.value for c in locked_cats])
-                print(f"    {driver}: Locked categories ({locked_str}) - keeping best results")
-            
+                print(
+                    f"    {driver}: Locked categories ({locked_str}) - keeping best results"
+                )
+
             rolls = self.roller.roll_for_driver(driver)
             result = self.calculator.create_setup_result(driver, session, rolls)
             results[driver] = result
-            
+
             # Update best results tracking after each session
             self.roller.update_best_results(driver, rolls)
-            
+
             # Report any newly locked categories
             new_locked = self.roller.get_locked_categories(driver)
             newly_locked = [c for c in new_locked if c not in locked_cats]
             if newly_locked:
                 for cat in newly_locked:
                     print(f"    {driver}: {cat.value} locked at best result (+0.3)")
-        
+
         return results
 
     def calculate_final_setups(

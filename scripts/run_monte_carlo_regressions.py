@@ -57,7 +57,9 @@ def _find_race_csv(output_dir: str, gp_name: Optional[str]) -> Optional[str]:
     return candidates[0] if candidates else None
 
 
-def _parse_podium_and_lapping(csv_path: str) -> Tuple[Optional[str], Optional[str], Optional[str], int, int]:
+def _parse_podium_and_lapping(
+    csv_path: str,
+) -> Tuple[Optional[str], Optional[str], Optional[str], int, int]:
     rows: List[Dict[str, str]] = []
     with open(csv_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -106,7 +108,9 @@ def run_experiment(exp: Experiment, base_output_dir: str) -> List[Dict[str, str]
 
             race_result = results.get("race", {}) if isinstance(results, dict) else {}
             status = race_result.get("status", "unknown")
-            output_dir = results.get("_output_dir", "") if isinstance(results, dict) else ""
+            output_dir = (
+                results.get("_output_dir", "") if isinstance(results, dict) else ""
+            )
             gp_name = race_result.get("gp_name", exp.track)
 
             winner = None
@@ -119,7 +123,9 @@ def run_experiment(exp: Experiment, base_output_dir: str) -> List[Dict[str, str]
             if status == "completed" and output_dir:
                 race_csv = _find_race_csv(output_dir, gp_name)
                 if race_csv and os.path.exists(race_csv):
-                    winner, p2, p3, lapped_count, max_laps_down = _parse_podium_and_lapping(race_csv)
+                    winner, p2, p3, lapped_count, max_laps_down = (
+                        _parse_podium_and_lapping(race_csv)
+                    )
 
             elapsed = round(time.time() - run_start, 2)
             print(
@@ -148,7 +154,9 @@ def run_experiment(exp: Experiment, base_output_dir: str) -> List[Dict[str, str]
 
         except Exception as exc:
             elapsed = round(time.time() - run_start, 2)
-            print(f"[{exp.name}] {index}/{total} seed={seed} status=error err={exc} t={elapsed}s")
+            print(
+                f"[{exp.name}] {index}/{total} seed={seed} status=error err={exc} t={elapsed}s"
+            )
             rows.append(
                 {
                     "experiment": exp.name,
@@ -212,13 +220,17 @@ def _summarize(rows: List[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
             item["errors"] = str(int(item["errors"]) + 1)
 
     for exp, item in summary.items():
-        exp_rows = [r for r in rows if r["experiment"] == exp and r["status"] == "completed"]
+        exp_rows = [
+            r for r in rows if r["experiment"] == exp and r["status"] == "completed"
+        ]
         if not exp_rows:
             continue
 
         lapped_values = [int(r.get("lapped_count", "0")) for r in exp_rows]
         item["avg_lapped"] = f"{sum(lapped_values) / len(lapped_values):.2f}"
-        item["max_laps_down"] = str(max(int(r.get("max_laps_down", "0")) for r in exp_rows))
+        item["max_laps_down"] = str(
+            max(int(r.get("max_laps_down", "0")) for r in exp_rows)
+        )
 
         winner_counts: Dict[str, int] = {}
         for r in exp_rows:
@@ -234,7 +246,9 @@ def _summarize(rows: List[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
     return summary
 
 
-def _write_summary_md(summary: Dict[str, Dict[str, str]], rows: List[Dict[str, str]], file_path: str) -> None:
+def _write_summary_md(
+    summary: Dict[str, Dict[str, str]], rows: List[Dict[str, str]], file_path: str
+) -> None:
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     lines: List[str] = []
     lines.append("# Monte Carlo Weekend Regression Summary")
@@ -243,7 +257,9 @@ def _write_summary_md(summary: Dict[str, Dict[str, str]], rows: List[Dict[str, s
     lines.append("")
     lines.append("## Experiment Overview")
     lines.append("")
-    lines.append("| Experiment | Track | Weekend Type | Runs | Completed | Errors | Avg Lapped Cars | Max Laps Down | Most Frequent Winner | Count |")
+    lines.append(
+        "| Experiment | Track | Weekend Type | Runs | Completed | Errors | Avg Lapped Cars | Max Laps Down | Most Frequent Winner | Count |"
+    )
     lines.append("|---|---|---:|---:|---:|---:|---:|---:|---|---:|")
 
     for exp, item in summary.items():
@@ -269,7 +285,9 @@ def _write_summary_md(summary: Dict[str, Dict[str, str]], rows: List[Dict[str, s
     experiments = sorted(set(r["experiment"] for r in rows))
     for exp in experiments:
         lines.append(f"### {exp}")
-        exp_rows = [r for r in rows if r["experiment"] == exp and r["status"] == "completed"]
+        exp_rows = [
+            r for r in rows if r["experiment"] == exp and r["status"] == "completed"
+        ]
         winner_counts: Dict[str, int] = {}
         for r in exp_rows:
             winner = r.get("winner", "")
@@ -292,7 +310,9 @@ def _write_summary_md(summary: Dict[str, Dict[str, str]], rows: List[Dict[str, s
 
 def main() -> int:
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    base_output_dir = os.path.join("outputs", "reports", f"monte_carlo_weekend_{timestamp}")
+    base_output_dir = os.path.join(
+        "outputs", "reports", f"monte_carlo_weekend_{timestamp}"
+    )
     os.makedirs(base_output_dir, exist_ok=True)
 
     experiments = [
