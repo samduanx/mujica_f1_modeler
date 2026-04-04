@@ -5018,7 +5018,9 @@ def save_race_results(
                 interval_field = interval_val
 
         # Use effective/classification laps for `laps_completed` to reflect classified lap count
-        laps_completed_field = int(effective_laps) if effective_laps is not None else int(actual_laps)
+        laps_completed_field = (
+            int(effective_laps) if effective_laps is not None else int(actual_laps)
+        )
 
         row = {
             "position": result["position"],
