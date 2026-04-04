@@ -5003,19 +5003,38 @@ def save_race_results(
         laps_down = result.get("laps_down", 0)
         is_lapped = result.get("is_lapped", False)
 
+        # Format interval: numeric for same-lap gaps, textual "+N Lap(s)" for lapped cars
+        interval_val = result.get("interval", None)
+        if pd.isna(interval_val) or interval_val is None:
+            if laps_down and int(laps_down) > 0:
+                ld = int(laps_down)
+                interval_field = f"+{ld} Lap" if ld == 1 else f"+{ld} Laps"
+            else:
+                interval_field = ""
+        else:
+            try:
+                interval_field = float(interval_val)
+            except (ValueError, TypeError):
+                interval_field = interval_val
+
+        # Use effective/classification laps for `laps_completed` to reflect classified lap count
+        laps_completed_field = (
+            int(effective_laps) if effective_laps is not None else int(actual_laps)
+        )
+
         row = {
             "position": result["position"],
             "driver": driver,
             "team": team,
             "total_time": result["cumulative_time"],
-            "interval": result.get("interval", 0.0),
+            "interval": interval_field,
             # FIA-compliant lapping fields
             "effective_laps": effective_laps,  # Laps for classification
             "actual_laps": actual_laps,  # Physical laps completed
             "laps_down": laps_down,  # Laps behind leader
             "is_lapped": "Yes" if is_lapped else "No",
-            # Legacy field for backward compatibility
-            "laps_completed": result.get("laps_completed", 0),
+            # Legacy field adjusted to show classified laps
+            "laps_completed": laps_completed_field,
             "num_pits": len(result["pit_laps"]),
             "pit_laps": ",".join(map(str, result["pit_laps"]))
             if result["pit_laps"]
