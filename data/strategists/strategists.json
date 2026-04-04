@@ -193,6 +193,27 @@
             "track_familiarity": {
                 "Silverstone": 3
             }
+        },
+        {
+            "name": "Michael Andretti",
+            "team": "Andretti",
+            "experience": 25,
+            "aggression": 0.7,
+            "conservatism": 0.3,
+            "intuition": 0.8,
+            "adaptability": 0.75,
+            "analytical": 0.7,
+            "communication": 0.85,
+            "wet_weather_skill": 0.75,
+            "tire_management": 0.7,
+            "undercut_skill": 0.8,
+            "pit_timing": 0.75,
+            "track_familiarity": {
+                "Monaco": 10,
+                "Monza": 12,
+                "Silverstone": 8,
+                "Spa": 9
+            }
         }
     ]
 }

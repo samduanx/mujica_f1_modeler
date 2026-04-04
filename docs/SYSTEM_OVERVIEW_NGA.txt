@@ -1,0 +1,1317 @@
+本安科从西班牙站开始使用全自动化的新系统。由于系统过于复杂，在此附上说明文件。
+请注意，该文档和整个代码库（已开源，见主楼）[b]完全是vibe coding的产物[/b]。
+
+========================================
+
+[collapse=1. 系统概览]
+
+[h]1.1 项目简介[/h]
+
+该系统的核心特征：在保留安科基本的骰点系统的同时，采取部分数学模型方法构建模拟。
+
+[h]1.2 比赛周末流程[/h]
+
+[b]标准周末：[/b] FP1 → FP2 → FP3 → 排位赛 → 正赛
+
+[b]冲刺周末：[/b] FP1 → 排位赛 → FP2 → 冲刺赛 → 正赛
+
+每个Session的结果都会自动向后传递。
+
+[/collapse]
+
+========================================
+
+[collapse=2. 核心数学模型]
+
+[h]2.1 R 值体系[/h]
+
+整个系统的核心是一个统一的评分体系，用 [b]R 值[/b] 衡量车手+赛车的综合实力。
+
+[h]DR（车手评分）[/h]
+
+[list]
+[*]范围：约 99.5 ~ 100.5
+[*]含义：代表车手的纯粹驾驶技术，与赛车无关
+[*]示例：Verstappen 100.5、Hamilton 100.4、Leclerc 100.4
+[*]该部分与旧版本没有区别
+[/list]
+
+[h]PR（赛车性能评分）[/h]
+
+[list]
+[*]计算公式：
+[/list]
+
+[code]PR = C(M) × Mech + C(A) × Aero + C(P) × Power[/code]
+
+[list]
+[*][b]Mech[/b]（机械抓地力）：制动性能、机械抓地力，范围 88~100
+[*][b]Aero[/b]（空气动力学效率）：下压力效率，范围 87~101
+[*][b]Power[/b]（动力单元）：引擎功率，范围 97~101
+[*]C(M), C(A), C(P) 是赛道系数，根据赛道特性调整各组件的权重
+[*]该部分与旧版本没有区别，但赛道系数的生成方法有变化，详见下文。
+[/list]
+
+[h]R 值（综合评分）[/h]
+
+[code]R = DR × PR / 100[/code]
+
+示例：Verstappen (DR=100.5) + Red Bull (PR=308.34) → R = 100.5 × 308.34 / 100 = [b]309.88[/b]
+
+[h]2.2 赛道系数[/h]
+
+每条赛道有独特的 C(M), C(A), C(P) 系数，用于调整各车队赛车属性的权重：
+
+[table]
+[tr][td][b]系数[/b][/td][td][b]含义[/b][/td][td][b]计算方法[/b][/td][/tr]
+[tr][td]C(M)（机械需求）[/td][td]基于重制动弯道比例[/td][td]<35%: 1.0, 35-40%: 1.05, >40%: 1.1[/td][/tr]
+[tr][td]C(A)（空力需求）[/td][td]基于倍耐力下压力评级[/td][td]5级(高): 1.0, 3级: 1.05, 1级(低): 1.1[/td][/tr]
+[tr][td]C(P)（动力需求）[/td][td]基于全油门百分比[/td][td]≤70%: 1.0, 70-80%: 1.05, ≥80%: 1.1[/td][/tr]
+[/table]
+
+[b]效果示例：[/b]
+[list]
+[*]蒙扎（高速赛道）：C(A)=1.1, C(P)=1.1 → 强调空力效率和引擎功率
+[*]摩纳哥（慢速街道赛）：C(M)=1.1 → 强调机械抓地力
+[/list]
+
+[h]2.3 圈速计算[/h]
+
+[h]基础圈速公式[/h]
+
+[code]t(base) = TRACK_BASE - (R - 300) × 0.01[/code]
+
+[list]
+[*]TRACK_BASE 是赛道基准时间（例如西班牙 89.0s，摩纳哥 79.6s）
+[*]参考 R = 300；R 每高 1 点，圈速快 0.01s
+[/list]
+
+[h]非线性 T-R 模型[/h]
+
+更精确的圈速计算使用非线性模型：
+
+[code]t = t(base) × (1 + α × (1 - R/R(max)) × exp(-γ × (1 - R/R(max))))[/code]
+
+其中：
+[list]
+[*]α = 0.65（退化幅度系数）
+[*]γ = 2.5（退化速率系数）
+[*]R(max) 是全场最高 R 值
+[/list]
+
+这个模型的特点是：在 R 值接近最大值时产生[b]边际递减效应[/b]，更接近真实的 F1 性能分布。
+
+[h]2.4 R 值补偿系统[/h]
+
+为了平衡同一车队内 1 号和 2 号车手的差距，系统对 2 号车手进行隐藏补偿：
+
+[code]R(compensated) = R(base) + compensation
+compensation = min((R(leader) - R(base)) × 0.5,  max_compensation)[/code]
+
+[table]
+[tr][td][b]车队层级[/b][/td][td][b]最大补偿值[/b][/td][/tr]
+[tr][td]顶级车队（红牛、法拉利、梅赛德斯、迈凯伦、阿斯顿马丁）[/td][td]0.35[/td][/tr]
+[tr][td]中游车队（阿尔派恩、威廉姆斯）[/td][td]0.25[/td][/tr]
+[tr][td]下游车队（AlphaTauri、Alfa Romeo、哈斯）[/td][td]0.15[/td][/tr]
+[/table]
+
+[h]2.5 圈速噪声模型[/h]
+
+实际圈速会加入随机噪声，模拟真实比赛中的圈速波动：
+
+[h]马尔可夫噪声过程[/h]
+
+[code]noise(new) = noise(old) × 0.6 × consistency_factor + N(0, σ(effective) × 0.3)[/code]
+
+[list]
+[*]噪声标准差取决于车手 DR 百分位：精英车手 0.01-0.02s，中等 0.02-0.04s，较低 0.04-0.08s
+[*]PR（赛车质量）影响方差：顶级赛车 ×0.92，低级赛车 ×1.18
+[*]马尔可夫因子 0.6 产生"状态连续性"——快圈之后更可能继续快，慢圈之后更可能继续慢
+[/list]
+
+[/collapse]
+
+========================================
+
+[collapse=3. 轮胎退化模型]
+
+[h]3.1 复合退化公式[/h]
+
+轮胎退化采用[b]乘法退化模型[/b]，包含三个组件：
+
+[h]基础退化（指数衰减）[/h]
+
+[code]M(base)(lap) = 1 + a × (1 - e^(-k1 × lap)) + b × (1 - e^(-k2 × lap))[/code]
+
+[list]
+[*]a, b：退化幅度系数
+[*]k1, k2：退化速率常数
+[*]两个指数项分别捕捉快速初始退化和缓慢长期磨损
+[/list]
+
+[h]悬崖效应（Sigmoid 函数）[/h]
+
+[code]M(cliff)(lap) = cliff_magnitude × 1/(1 + e^(-cliff_steepness × (lap - cliff_lap)))[/code]
+
+[list]
+[*]cliff_lap：悬崖效应开始的圈数
+[*]cliff_magnitude：悬崖严重程度
+[*]cliff_steepness = 2.5（固定值，控制悬崖陡峭度）
+[/list]
+
+[h]总退化乘数[/h]
+
+[code]M(total)(lap) = M(base)(lap) + M(cliff)(lap)[/code]
+
+[h]3.2 各配方参数对比[/h]
+
+[table]
+[tr][td][b]配方[/b][/td][td][b]a[/b][/td][td][b]k1[/b][/td][td][b]b[/b][/td][td][b]k2[/b][/td][td][b]悬崖圈数[/b][/td][td][b]悬崖幅度[/b][/td][td][b]特点[/b][/td][/tr]
+[tr][td]C1（最硬）[/td][td]0.010[/td][td]0.05[/td][td]0.035[/td][td]0.010[/td][td]45[/td][td]0.025[/td][td]退化最慢，悬崖最晚[/td][/tr]
+[tr][td]C2[/td][td]0.015[/td][td]0.08[/td][td]0.050[/td][td]0.015[/td][td]35[/td][td]0.040[/td][td]均衡性能[/td][/tr]
+[tr][td]C3（中性）[/td][td]0.025[/td][td]0.10[/td][td]0.070[/td][td]0.020[/td][td]28[/td][td]0.060[/td][td]标准比赛轮胎[/td][/tr]
+[tr][td]C4[/td][td]0.040[/td][td]0.15[/td][td]0.090[/td][td]0.030[/td][td]22[/td][td]0.090[/td][td]初期抓地力好，退化快[/td][/tr]
+[tr][td]C5（最软）[/td][td]0.065[/td][td]0.20[/td][td]0.130[/td][td]0.040[/td][td]15[/td][td]0.150[/td][td]退化最快，悬崖最早最猛[/td][/tr]
+[/table]
+
+[h]3.3 配方间性能差距[/h]
+
+[table]
+[tr][td][b]配方对比[/b][/td][td][b]圈速差距[/b][/td][/tr]
+[tr][td]C5 vs C4[/td][td]0.55-0.70s[/td][/tr]
+[tr][td]C4 vs C3[/td][td]0.40-0.50s[/td][/tr]
+[tr][td]C3 vs C2[/td][td]0.30-0.40s[/td][/tr]
+[tr][td]C2 vs C1[/td][td]0.20-0.30s[/td][/tr]
+[tr][td]C5→C1 总计[/td][td]~1.4-1.9s/圈[/td][/tr]
+[/table]
+
+[h]3.4 赛道与压力补偿[/h]
+
+考虑赛道特性和胎压设定时：
+
+[code]M(compensated) = 1 + (M(uncompensated) - 1) × W(track) × P(setup)[/code]
+
+[list]
+[*]W(track)：赛道磨损系数 = 1 + 0.2 × (abrasion - 3) / 2
+[*]P(setup)：胎压惩罚 = 1 + 0.0125 × (pressure_deviation)^2
+[/list]
+
+[h]3.5 温度修正[/h]
+
+[code]k(corrected) = k × e^(-α × (T(track) - T(opt)))[/code]
+
+[list]
+[*]α = 0.015 ~ 0.025 /°C
+[*]温度每升高 10°C，悬崖提前 1-2 圈
+[*]软配方（C4-C5）对温度更敏感
+[/list]
+
+[h]3.6 非线性 R 值缩放[/h]
+
+更好的车手能更充分地利用轮胎：
+
+[code]scaled_lap = base_lap × (1 + 0.65 × (1 - R/R(max)) × e^(-2.5 × (1 - R/R(max))))[/code]
+
+高 R 值车手的轮胎有效寿命更长。
+
+[/collapse]
+
+========================================
+
+[collapse=4. 比赛模拟引擎]
+
+[h]4.1 主循环结构[/h]
+
+正赛模拟的核心循环在 enhanced_long_dist_sim.py 的 run_simulation() 方法中：
+
+[list=1]
+[*][b]初始化[/b]：加载车手数据，生成策略（1停或2停），确定进站圈数，分配轮胎配方序列
+[*][b]发车模拟[/b]：模拟静止起步，包含反应时间、起步质量、格位惩罚
+[*][b]逐圈循环[/b]（对每个未退赛车手）：
+[list]
+[*]天气更新
+[*]事故检查（赛车故障、车手失误）
+[*]超车检查
+[*]进站处理
+[*]圈速计算（基础圈速 + 轮胎退化 + 噪声 + 配方差异 + 事故损失 + SC/VSC 效果）
+[*]安全车/VSC 处理
+[*]套圈检测
+[/list]
+[*][b]最终成绩[/b]：按有效圈数和累计时间排序
+[*][b]输出[/b]：CSV 结果、骰子记录、Markdown 报告
+[/list]
+
+[h]4.2 发车模拟[/h]
+
+发车模拟包含以下因素：
+
+[h]格位惩罚[/h]
+
+[table]
+[tr][td][b]位置[/b][/td][td][b]时间惩罚[/b][/td][/tr]
+[tr][td]杆位[/td][td]0.0s[/td][/tr]
+[tr][td]P2[/td][td]0.05s[/td][/tr]
+[tr][td]第一排[/td][td]0.1s[/td][/tr]
+[tr][td]第二排[/td][td]0.18s[/td][/tr]
+[tr][td]第三排[/td][td]0.28s[/td][/tr]
+[tr][td]第四排[/td][td]0.4s[/td][/tr]
+[tr][td]第5-8排[/td][td]0.55s + (pos-11)×0.08s[/td][/tr]
+[tr][td]第9排+[/td][td]0.85s + (pos-16)×0.10s[/td][/tr]
+[/table]
+
+[h]反应时间[/h]
+
+使用 d10 骰子决定：
+[list]
+[*]1 = 非常慢
+[*]10 = 极佳
+[/list]
+
+受车手个性特质（侵略性、稳定性）修正。
+
+[h]起步质量[/h]
+
+d10 骰子：
+[list]
+[*]1 = 重大失误（严重延迟）
+[*]2 = 打滑
+[*]3-8 = 正常
+[*]9-10 = 完美起步
+[/list]
+
+[h]赛道直道影响[/h]
+
+[table]
+[tr][td][b]分类[/b][/td][td][b]直道长度[/b][/td][td][b]基础时间惩罚[/b][/td][td][b]示例赛道[/b][/td][/tr]
+[tr][td]长直道[/td][td]>1000m[/td][td]0.8s[/td][td]巴林、意大利[/td][/tr]
+[tr][td]中直道[/td][td]600-1000m[/td][td]1.2s[/td][td]西班牙、澳大利亚[/td][/tr]
+[tr][td]短直道[/td][td]<600m[/td][td]2.0s[/td][td]摩纳哥、阿塞拜疆[/td][/tr]
+[/table]
+
+[h]特殊事件概率[/h]
+
+[list]
+[*]起步失误：max(0.005, 0.03 - consistency × 0.02)，损失 0.4-1.0s
+[*]完美起步：min(0.015, 0.005 + consistency × 0.01)，收益 0.15-0.4s
+[*]格位碰撞风险：前 6 排有 0.02 × (6 - grid_position + 1) / 6 的概率
+[/list]
+
+[h]4.3 进站系统[/h]
+
+[h]策略确定[/h]
+
+[list]
+[*]基线分布：50% 一停，50% 两停
+[*]基于历史 2022-2024 数据的加权随机选择
+[*]平滑贝叶斯评分模型分析过去模拟结果
+[*]摩纳哥特殊规则：95% 一停（仅 5% 两停）
+[/list]
+
+[h]进站圈生成[/h]
+
+[table]
+[tr][td][b]策略[/b][/td][td][b]进站圈（占总圈数比例）[/b][/td][/tr]
+[tr][td]一停[/td][td]~60%[/td][/tr]
+[tr][td]两停[/td][td]~35% 和 ~70%[/td][/tr]
+[tr][td]三停[/td][td]~30%, ~55%, ~80%[/td][/tr]
+[/table]
+
+实际进站圈使用历史数据并加入 ±10 圈随机偏差。
+
+[h]进站时间计算（骰子系统）[/h]
+
+[b]第一阶段 — D10：[/b]
+
+[table]
+[tr][td][b]骰子[/b][/td][td][b]概率[/b][/td][td][b]结果[/b][/td][td][b]时间范围[/b][/td][/tr]
+[tr][td]1-2[/td][td]20%[/td][td]快速换胎[/td][td]2.0-2.3s[/td][/tr]
+[tr][td]3-7[/td][td]50%[/td][td]正常换胎[/td][td]2.3-3.0s[/td][/tr]
+[tr][td]8-9[/td][td]20%[/td][td]缓慢换胎[/td][td]3.0-3.5s[/td][/tr]
+[tr][td]10[/td][td]10%[/td][td]进入第二阶段[/td][td]特殊[/td][/tr]
+[/table]
+
+[b]第二阶段 — D2（仅 D10=10 时触发）：[/b]
+
+[table]
+[tr][td][b]骰子[/b][/td][td][b]总概率[/b][/td][td][b]结果[/b][/td][td][b]时间范围[/b][/td][/tr]
+[tr][td]1[/td][td]5%[/td][td]大成功（出色配合）[/td][td]1.8-2.0s[/td][/tr]
+[tr][td]2[/td][td]5%[/td][td]大失败（问题进站）[/td][td]3.5-15.0s[/td][/tr]
+[/table]
+
+大失败使用截断正态分布 N(6.0, 2.0^2)，截断至 [3.5, 15] 秒。
+
+[b]总进站时间：[/b]
+
+[code]t(pit) = t(pitlane) + t(tire_change) + t(front_wing)[/code]
+
+[list]
+[*]t(pitlane)：赛道维修区时间（来自 pitlane_time.csv，典型值 22-25s）
+[*]安全车下：-10s
+[*]VSC 下：-6s
+[/list]
+
+[h]前翼更换[/h]
+
+进站时如果车手有前翼损坏，d10 骰子决定是否更换，更换会增加额外时间。
+
+[/collapse]
+
+========================================
+
+[collapse=5. DRS 与超车系统]
+
+[h]5.1 DRS 区域配置[/h]
+
+每个 DRS 区域定义 6 个参数：
+[list]
+[*]zone_id：唯一标识符
+[*]start_distance / end_distance：区域起止距离（米）
+[*]detection_point：DRS 资格检测点（米）
+[*]base_time_gain：DRS 激活时的预期时间收益（典型 0.03-0.20s）
+[*]activation_probability：激活概率（默认 85%）
+[/list]
+
+[h]5.2 DRS 资格规则[/h]
+
+[list=1]
+[*]第一圈禁用 DRS
+[*]第 2 圈后启用
+[*]车手在检测点必须在前车 1 秒以内
+[*]仅限指定区域使用
+[/list]
+
+[h]5.3 DRS 收益计算[/h]
+
+[code]gain = zone.base_time_gain + U(-variation, +variation)[/code]
+
+激活概率检查：random() > activation_probability 时收益为 0。
+
+[h]5.4 超车触发概率[/h]
+
+超车系统采用[b]两层架构[/b]：
+
+[h]第一层：触发系统[/h]
+
+[code]P = P(base) × M(lap) × M(DRS) × M(gap) × M(section) × M(consecutive) × M(density)[/code]
+
+[b]各赛道基础概率：[/b]
+
+[table]
+[tr][td][b]赛道[/b][/td][td][b]基础概率[/b][/td][td][b]预期超车数/场[/b][/td][/tr]
+[tr][td]蒙扎[/td][td]0.0003[/td][td]50-70[/td][/tr]
+[tr][td]银石[/td][td]0.0012[/td][td]20-30[/td][/tr]
+[tr][td]摩纳哥[/td][td]0.00002[/td][td]0-2[/td][/tr]
+[tr][td]默认[/td][td]0.0008-0.0010[/td][td]30-50[/td][/tr]
+[/table]
+
+[b]修正函数：[/b]
+
+[table]
+[tr][td][b]修正类型[/b][/td][td][b]条件[/b][/td][td][b]倍数[/b][/td][/tr]
+[tr][td]圈数修正[/td][td]前3圈[/td][td]×1.5[/td][/tr]
+[tr][td][/td][td]最后10%[/td][td]×1.3[/td][/tr]
+[tr][td][/td][td]进站窗口(35-50%)[/td][td]×1.2[/td][/tr]
+[tr][td]DRS修正[/td][td]在DRS区域内[/td][td]×2.0[/td][/tr]
+[tr][td]差距修正[/td][td]≤0.3s[/td][td]×2.5[/td][/tr]
+[tr][td][/td][td]≤0.5s[/td][td]×1.8[/td][/tr]
+[tr][td][/td][td]≤1.0s[/td][td]×1.0[/td][/tr]
+[tr][td][/td][td]≤2.0s[/td][td]×0.4[/td][/tr]
+[tr][td][/td][td]>2.0s[/td][td]×0.05[/td][/tr]
+[tr][td]路段修正[/td][td]DRS区域[/td][td]×1.8[/td][/tr]
+[tr][td][/td][td]直道[/td][td]×1.3[/td][/tr]
+[tr][td][/td][td]弯道入口[/td][td]×1.1[/td][/tr]
+[tr][td][/td][td]S弯[/td][td]×1.15[/td][/tr]
+[tr][td][/td][td]弯道出口[/td][td]×0.9[/td][/tr]
+[tr][td][/td][td]发夹弯[/td][td]×0.4[/td][/tr]
+[tr][td]密度修正[/td][td]≥4车在范围内[/td][td]×2.0[/td][/tr]
+[tr][td][/td][td]≥2车[/td][td]×1.3[/td][/tr]
+[tr][td]连续惩罚[/td][td]每次连续超车[/td][td]×0.15[/td][/tr]
+[/table]
+
+[h]第二层：对抗系统[/h]
+
+超车尝试使用[b]对抗骰子机制[/b]解决：
+
+[code]Attacker(total) = 1d10 + DR(attack) + Situation_mods
+Defender(total) = 1d10 + DR(defend) + Situation_mods[/code]
+
+[list]
+[*]高者胜
+[*]平局防守方胜
+[/list]
+
+[b]三种对抗场景：[/b]
+
+[b]A. DRS 区域内：[/b]
+[list]
+[*]进攻方：1d10 + (DR(attack)-80)/2 + 3(有DRS时) + Speed_Delta
+[*]防守方：1d10 + (DR(defend)-80)/2 - 3(对方有DRS时) + Grip
+[/list]
+
+[b]B. DRS 区域末端（弯道入口）：[/b]
+[list]
+[*]进攻方：1d10 + (DR(attack)-80)/2 + Corner_Exit_Mod + Brake_Mod
+[*]防守方：1d10 + (DR(defend)-80)/2 + Line_Mod + Defensive_Mod
+[/list]
+
+[b]C. 其他位置：[/b]
+[list]
+[*]双方：1d10 + (DR-80)/2 + Precision + Experience
+[/list]
+
+[h]推进机制（Push）[/h]
+
+当进攻方以 ≤3 差距失败且轮胎较新（tyre_degradation < 1.15）时：
+
+[code]New(attacker) = Attacker(total) + 1d6[/code]
+
+[list]
+[*]若新值 > 防守方 → 进攻方胜
+[*]代价：无论结果如何，+2 轮胎退化
+[/list]
+
+[h]5.5 车手 DR 对超车的影响[/h]
+
+[table]
+[tr][td][b]DR 值[/b][/td][td][b]修正值[/b][/td][td][b]描述[/b][/td][/tr]
+[tr][td]80[/td][td]-5.0[/td][td]低于平均[/td][/tr]
+[tr][td]86[/td][td]+0.0[/td][td]平均[/td][/tr]
+[tr][td]90[/td][td]+4.0[/td][td]优秀[/td][/tr]
+[tr][td]92[/td][td]+6.0[/td][td]精英[/td][/tr]
+[/table]
+
+DR 还影响：
+[list]
+[*]制动控制：(DR-80)/12（范围 0-3）
+[*]抓地力/牵引力：(DR-82)/10（范围 0-2）
+[*]防守线路：(DR-80)/12（范围 0-3）
+[/list]
+
+[/collapse]
+
+========================================
+
+[collapse=6. 事故系统]
+
+[h]6.1 事故类型与概率[/h]
+
+[table]
+[tr][td][b]事故类型[/b][/td][td][b]基础概率[/b][/td][td][b]触发机制[/b][/td][/tr]
+[tr][td]超车碰撞[/td][td]5%（每次超车尝试）[/td][td]超车触发系统[/td][/tr]
+[tr][td]车手失误[/td][td]3%（每圈）[/td][td]基于 DR 的概率[/td][/tr]
+[tr][td]赛车故障[/td][td]~0.7-2%（整场）[/td][td]稳定性骰子（10d100）[/td][/tr]
+[tr][td]反击碰撞[/td][td]30% 基础（限幅 10-60%）[/td][td]超车后反击[/td][/tr]
+[/table]
+
+[h]6.2 车手失误概率[/h]
+
+[code]P(error) = P(base) - (DR - 80)/40 × 0.02[/code]
+
+[b]修正因子：[/b]
+
+[table]
+[tr][td][b]条件[/b][/td][td][b]修正[/b][/td][/tr]
+[tr][td]轮胎退化 > 1.2[/td][td]×1.5[/td][/tr]
+[tr][td]轮胎退化 > 1.1[/td][td]×1.2[/td][/tr]
+[tr][td]位置 ≤ 3（领先者）[/td][td]×0.8[/td][/tr]
+[tr][td]位置 ≥ 15（后方）[/td][td]×1.2[/td][/tr]
+[tr][td]承受压力[/td][td]×1.3[/td][/tr]
+[tr][td]第一圈[/td][td]×1.5[/td][/tr]
+[tr][td]前3圈[/td][td]×1.2[/td][/tr]
+[/table]
+
+[b]R 值覆盖：[/b]
+[list]
+[*]R ≥ 100.0：固定 0.1%（几乎无失误）
+[*]R ≥ 99.5：固定 0.5%（极低失误率）
+[/list]
+
+[b]骰子解决：[/b] d20 对抗 DR 计算的阈值（DR 92 → 阈值 21，上限 20）
+
+[table]
+[tr][td][b]骰子结果[/b][/td][td][b]严重程度[/b][/td][/tr]
+[tr][td]≥ 阈值+5[/td][td]轻微（0.5s 损失）[/td][/tr]
+[tr][td]≥ 阈值[/td][td]中等（1.5s 损失）[/td][/tr]
+[tr][td]≥ 阈值-5[/td][td]重大（3.0s 损失，-1 位置）[/td][/tr]
+[tr][td]< 阈值-5[/td][td]严重（5.0s 损失，-1 位置）[/td][/tr]
+[/table]
+
+[h]6.3 赛车故障系统[/h]
+
+[h]稳定性检查（10d100 骰子）[/h]
+
+[b]稳定性 < 96 的赛车：[/b]
+
+[table]
+[tr][td][b]骰子总和[/b][/td][td][b]结果[/b][/td][/tr]
+[tr][td]1-800[/td][td]无事发生[/td][/tr]
+[tr][td]801-900[/td][td]车手失误[/td][/tr]
+[tr][td]901-1000[/td][td]机械故障[/td][/tr]
+[/table]
+
+[b]稳定性 ≥ 96 的赛车：[/b]
+
+[table]
+[tr][td][b]骰子总和[/b][/td][td][b]结果[/b][/td][/tr]
+[tr][td]1-900[/td][td]无事发生[/td][/tr]
+[tr][td]901-950[/td][td]车手失误[/td][/tr]
+[tr][td]951-1000[/td][td]机械故障[/td][/tr]
+[/table]
+
+[h]故障概率公式[/h]
+
+[code]P(fault) = stability_factor + pu_factor + distance_factor + damage_factor[/code]
+
+其中：
+[list]
+[*]stability_factor = (100 - base_stability) / 250
+[*]pu_factor = (laps_on_pu / 50) × 0.01
+[*]distance_factor = (race_distance_km / 300) × 0.005
+[*]damage_factor = 0.02（如有事故损伤）
+[/list]
+
+总概率限幅至 0.5%-8%。
+
+[h]各车队稳定性[/h]
+
+[table]
+[tr][td][b]车队[/b][/td][td][b]稳定性[/b][/td][td][b]预估故障率（70圈）[/b][/td][/tr]
+[tr][td]阿斯顿马丁[/td][td]98.5[/td][td]~0.8%[/td][/tr]
+[tr][td]哈斯[/td][td]97.5[/td][td]~0.9%[/td][/tr]
+[tr][td]阿尔派恩[/td][td]97.75[/td][td]~0.9%[/td][/tr]
+[tr][td]梅赛德斯[/td][td]97.0[/td][td]~0.9%[/td][/tr]
+[tr][td]迈凯伦[/td][td]96.5[/td][td]~1.0%[/td][/tr]
+[tr][td]红牛[/td][td]96.0[/td][td]~1.0%[/td][/tr]
+[tr][td]法拉利[/td][td]95.0[/td][td]~1.2%[/td][/tr]
+[tr][td]威廉姆斯[/td][td]95.0[/td][td]~1.3%[/td][/tr]
+[/table]
+
+[h]故障子表（d10）[/h]
+
+[b]引擎故障（50% 概率）：[/b]
+[list]
+[*]1-3：内燃机故障（15s 损失）
+[*]4-6：混动系统故障（12s 损失）
+[*]7-9：电池/机油问题（8s 损失）
+[*]10：灾难性故障（退赛）
+[/list]
+
+[b]机械故障（40% 概率）：[/b]
+[list]
+[*]1-3：底盘/悬挂（20s 损失）
+[*]4-6：液压系统（15s 损失）
+[*]7-9：电气系统（10s 损失）
+[*]10：灾难性故障（退赛）
+[/list]
+
+[b]轮胎故障（20% 概率）：[/b]
+[list]
+[*]1-3：碎片扎胎（3s 损失，需进站）
+[*]4-6：过热爆胎（5s 损失）
+[*]7-9：制造缺陷（2s 损失）
+[*]10：结构性故障（8s 损失）
+[/list]
+
+[h]6.4 安全车与 VSC 触发条件[/h]
+
+[table]
+[tr][td][b]条件[/b][/td][td][b]比赛控制状态[/b][/td][/tr]
+[tr][td]赛道湿滑（降雨）[/td][td]黄旗[/td][/tr]
+[tr][td]暴雨强度[/td][td]安全车出动[/td][/tr]
+[tr][td]特大暴雨[/td][td]红旗（比赛中止）[/td][/tr]
+[/table]
+
+状态转换：绿旗 → 黄旗 → 双黄旗 → 安全车/VSC → 红旗
+
+[/collapse]
+
+========================================
+
+[collapse=7. 天气系统]
+
+[h]7.1 天气类型[/h]
+
+9 种天气类型：晴朗 → 多云 → 阴天 → 阴沉 → 小雨 → 中雨 → 大雨 → 暴雨 → 雷暴
+
+[h]7.2 降雨强度[/h]
+
+[table]
+[tr][td][b]等级[/b][/td][td][b]值[/b][/td][td][b]能见度[/b][/td][td][b]降雨率[/b][/td][td][b]赛道影响[/b][/td][/tr]
+[tr][td]无[/td][td]0[/td][td]8000-10000m[/td][td]0 mm/min[/td][td]干燥[/td][/tr]
+[tr][td]小雨[/td][td]1[/td][td]5000-8000m[/td][td]0.5 mm/min[/td][td]潮湿/湿滑[/td][/tr]
+[tr][td]中雨[/td][td]2[/td][td]2000-5000m[/td][td]2.0 mm/min[/td][td]湿滑[/td][/tr]
+[tr][td]大雨[/td][td]3[/td][td]500-2000m[/td][td]5.0 mm/min[/td][td]湿滑/积水[/td][/tr]
+[tr][td]特大[/td][td]4[/td][td]100-500m[/td][td]10.0 mm/min[/td][td]积水[/td][/tr]
+[/table]
+
+[h]7.3 降雨概率计算[/h]
+
+[code]P(rain) = P(base) × C(climate) × S(seasonal) × 0.85[/code]
+
+限幅至 0.5%-52%。
+
+[h]气候修正[/h]
+
+[table]
+[tr][td][b]气候[/b][/td][td][b]降雨倍数[/b][/td][td][b]强度偏向[/b][/td][td][b]雷暴概率[/b][/td][td][b]持续时间[/b][/td][/tr]
+[tr][td]沙漠[/td][td]×0.2[/td][td]0.1（轻）[/td][td]1%[/td][td]10-20min[/td][/tr]
+[tr][td]热带[/td][td]×1.5[/td][td]0.6（重）[/td][td]15%[/td][td]20-45min[/td][/tr]
+[tr][td]温带[/td][td]×1.3[/td][td]0.4[/td][td]8%[/td][td]15-35min[/td][/tr]
+[tr][td]大陆性[/td][td]×1.0[/td][td]0.5[/td][td]12%[/td][td]15-30min[/td][/tr]
+[tr][td]地中海[/td][td]×0.7[/td][td]0.3[/td][td]5%[/td][td]10-25min[/td][/tr]
+[/table]
+
+[h]各赛道降雨概率[/h]
+
+[table]
+[tr][td][b]赛道[/b][/td][td][b]气候[/b][/td][td][b]基础降雨%[/b][/td][td][b]计算值%[/b][/td][td][b]天气变化概率[/b][/td][/tr]
+[tr][td]巴林[/td][td]沙漠[/td][td]5%[/td][td]~0.85%[/td][td]5%[/td][/tr]
+[tr][td]摩纳哥[/td][td]地中海[/td][td]20%[/td][td]~10%[/td][td]15%[/td][/tr]
+[tr][td]英国[/td][td]温带[/td][td]18%[/td][td]~20%[/td][td]45%[/td][/tr]
+[tr][td]比利时[/td][td]温带[/td][td]45%[/td][td]~50%[/td][td]40%[/td][/tr]
+[tr][td]新加坡[/td][td]热带[/td][td]50%[/td][td]~64%[/td][td]20%[/td][/tr]
+[tr][td]巴西[/td][td]热带[/td][td]45%[/td][td]~57%[/td][td]25%[/td][/tr]
+[/table]
+
+[h]7.4 动态天气模式[/h]
+
+"英国夏日效应"模型——比赛中期天气变化：
+
+[list]
+[*]晴 ↔ 雨 切换机制
+[*]最小变化间隔：10 分钟
+[*]最大变化间隔：45 分钟
+[*]时间概率递增：P(effective) = P(base) × (0.35 + 0.45 × time_factor)
+[*]仅对 weather_change_probability ≥ 0.25 的赛道启用
+[/list]
+
+[h]7.5 天气对圈速和轮胎选择的影响[/h]
+
+[h]轮胎交叉点[/h]
+
+[table]
+[tr][td][b]转换[/b][/td][td][b]圈速阈值[/b][/td][/tr]
+[tr][td]光头胎 → 中性胎[/td][td]干地圈速的 110-112%[/td][/tr]
+[tr][td]中性胎 → 雨胎[/td][td]干地圈速的 115-120%[/td][/tr]
+[tr][td]雨胎 → 中性胎[/td][td]干地圈速的 105-108%[/td][/tr]
+[tr][td]中性胎 → 光头胎[/td][td]干地圈速的 102-105%[/td][/tr]
+[/table]
+
+[h]错误轮胎的速度惩罚[/h]
+
+[table]
+[tr][td][b]条件[/b][/td][td][b]速度倍数[/b][/td][td][b]时间惩罚[/b][/td][/tr]
+[tr][td]小雨 + 光头胎[/td][td]1.08-1.12x[/td][td]+0-5s/圈[/td][/tr]
+[tr][td]中雨 + 光头胎[/td][td]1.12-1.18x[/td][td]+10-20s/圈[/td][/tr]
+[tr][td]大雨 + 光头胎[/td][td]1.18-1.25x[/td][td]+20-30s/圈[/td][/tr]
+[tr][td]雨胎 + 干地[/td][td]-[/td][td]+15-25s/圈[/td][/tr]
+[/table]
+
+[h]7.6 赛道积水模型[/h]
+
+[code]water_level = rain_input - natural_drainage - car_sweeping[/code]
+
+[list]
+[*]干胎排水：0.003/圈
+[*]中性胎排水：0.002/圈
+[*]雨胎排水：0.0015/圈
+[/list]
+
+赛道状态阈值：
+[list]
+[*]< 0.08：干燥
+[*]< 0.22：潮湿
+[*]< 0.60：湿滑
+[*]≥ 0.60：积水
+[/list]
+
+[/collapse]
+
+========================================
+
+[collapse=8. 策略师系统]
+
+[h]8.1 策略师属性[/h]
+
+每位策略师有 12 个 0.0-1.0 的属性，映射为修正值：
+
+[table]
+[tr][td][b]属性范围[/b][/td][td][b]修正值[/b][/td][/tr]
+[tr][td]0.00-0.25[/td][td]-2[/td][/tr]
+[tr][td]0.26-0.40[/td][td]-1[/td][/tr]
+[tr][td]0.41-0.60[/td][td]0[/td][/tr]
+[tr][td]0.61-0.75[/td][td]+1[/td][/tr]
+[tr][td]0.76-0.90[/td][td]+2[/td][/tr]
+[tr][td]0.91-1.00[/td][td]+3[/td][/tr]
+[/table]
+
+[b]核心属性：[/b] 侵略性、保守性、直觉、适应性、分析能力、沟通能力
+
+[b]专项技能：[/b] 湿地技能（×1.5倍）、轮胎管理、底切技能（×1.5倍）、进站时机
+
+[h]8.2 骰子机制[/h]
+
+[code]Final_Value = d20 + Total_Modifier
+Total_Modifier = Experience + Attributes + Track_Familiarity + Special + Difficulty[/code]
+
+[h]结果判定[/h]
+
+[table]
+[tr][td][b]原始骰子[/b][/td][td][b]最终值[/b][/td][td][b]结果[/b][/td][/tr]
+[tr][td]天然1[/td][td]任意[/td][td][b]大失败[/b][/td][/tr]
+[tr][td]天然20[/td][td]任意[/td][td][b]大成功[/b][/td][/tr]
+[tr][td]任意[/td][td]≤5[/td][td]失败[/td][/tr]
+[tr][td]任意[/td][td]6-10[/td][td]部分成功[/td][/tr]
+[tr][td]任意[/td][td]11-15[/td][td]成功[/td][/tr]
+[tr][td]任意[/td][td]16-19[/td][td]大成功[/td][/tr]
+[tr][td]任意[/td][td]≥20[/td][td]大成功[/td][/tr]
+[/table]
+
+[h]决策类型与属性对应[/h]
+
+[table]
+[tr][td][b]决策类型[/b][/td][td][b]使用属性[/b][/td][td][b]基础TN[/b][/td][/tr]
+[tr][td]进站时机[/td][td]pit_timing, tire_management, aggression[/td][td]12[/td][/tr]
+[tr][td]轮胎配方[/td][td]tire_management, analytical, intuition[/td][td]12[/td][/tr]
+[tr][td]比赛节奏[/td][td]aggression, conservatism, analytical[/td][td]10[/td][/tr]
+[tr][td]天气应对[/td][td]wet_weather, intuition, adaptability[/td][td]14[/td][/tr]
+[tr][td]安全车应对[/td][td]analytical, adaptability, aggression[/td][td]13[/td][/tr]
+[tr][td]底切尝试[/td][td]undercut, pit_timing, aggression[/td][td]15[/td][/tr]
+[/table]
+
+[h]8.3 进站时机决策[/h]
+
+[h]结果对时机的影响[/h]
+
+[table]
+[tr][td][b]结果[/b][/td][td][b]时机偏移[/b][/td][td][b]时间影响[/b][/td][/tr]
+[tr][td]大成功[/td][td]-2 圈（提前）[/td][td]-3.0s[/td][/tr]
+[tr][td]大成功[/td][td]-1 圈[/td][td]-1.5s[/td][/tr]
+[tr][td]成功[/td][td]0（准确）[/td][td]0.0s[/td][/tr]
+[tr][td]部分成功[/td][td]+1 圈[/td][td]+1.0s[/td][/tr]
+[tr][td]失败[/td][td]+3 圈[/td][td]+3.0s[/td][/tr]
+[tr][td]大失败[/td][td]+5 圈[/td][td]+6.0s[/td][/tr]
+[/table]
+
+[h]轮胎配方选择[/h]
+
+使用 d20 + 天气惩罚（0-3，降雨确定性 80%+ 时 -1）：
+
+[list]
+[*][b]>50 圈剩余：[/b] 大成功 → 中性，成功 → 硬，失败 → 软
+[*][b]≤50 圈剩余：[/b] 大成功 → 软，成功 → 中性，失败 → 硬
+[*][b]湿地：[/b] >80% 降雨 → 雨胎（好骰子时），否则 → 中性胎
+[/list]
+
+[h]8.4 节奏模式[/h]
+
+[table]
+[tr][td][b]模式[/b][/td][td][b]速度[/b][/td][td][b]轮胎磨损[/b][/td][td][b]燃油消耗[/b][/td][/tr]
+[tr][td]PUSH（全力）[/td][td]100%[/td][td]150%[/td][td]120%[/td][/tr]
+[tr][td]RACE（比赛）[/td][td]95%[/td][td]100%[/td][td]100%[/td][/tr]
+[tr][td]MANAGE（管理）[/td][td]90%[/td][td]70%[/td][td]85%[/td][/tr]
+[tr][td]SAVE（节省）[/td][td]85%[/td][td]50%[/td][td]70%[/td][/tr]
+[tr][td]LIFT_AND_COAST[/td][td]80%[/td][td]40%[/td][td]50%[/td][/tr]
+[/table]
+
+[h]结果对节奏的影响[/h]
+
+[table]
+[tr][td][b]结果[/b][/td][td][b]效率倍数[/b][/td][/tr]
+[tr][td]大成功[/td][td]×1.30[/td][/tr]
+[tr][td]大成功[/td][td]×1.15[/td][/tr]
+[tr][td]成功[/td][td]×1.00[/td][/tr]
+[tr][td]部分成功[/td][td]×0.85[/td][/tr]
+[tr][td]失败[/td][td]×0.65[/td][/tr]
+[tr][td]大失败[/td][td]×0.40[/td][/tr]
+[/table]
+
+[h]失败时的模式调整[/h]
+
+[list]
+[*]部分成功：PUSH→RACE, MANAGE→RACE, SAVE→MANAGE
+[*]失败：PUSH→MANAGE, RACE→MANAGE, MANAGE→SAVE, SAVE→LIFT_AND_COAST
+[*]大失败：PUSH→SAVE, RACE→SAVE, MANAGE→PUSH, SAVE→PUSH（完全适得其反）
+[/list]
+
+[h]8.5 团队指令[/h]
+
+[h]发出条件[/h]
+
+[list]
+[*]两车位置相邻（差距 1）
+[*]后车每圈至少快 0.3s
+[*]差距在 0.1-2.0 秒之间
+[*]每 5 圈检查一次
+[/list]
+
+[h]车手服从度[/h]
+
+[table]
+[tr][td][b]车手[/b][/td][td][b]特质[/b][/td][td][b]服从率[/b][/td][td][b]机制[/b][/td][/tr]
+[tr][td]Russell[/td][td]团队精神[/td][td]80%[/td][td]1d10 ≥ 3 服从[/td][/tr]
+[tr][td]Ocon[/td][td]狮子[/td][td]0%[/td][td]永不服从[/td][/tr]
+[tr][td]Bottas[/td][td]好大哥[/td][td]100%[/td][td]自动服从（帮 Zhou）[/td][/tr]
+[tr][td]Verstappen[/td][td]-[/td][td]70%[/td][td]标准[/td][/tr]
+[tr][td]Hamilton[/td][td]-[/td][td]80%[/td][td]标准[/td][/tr]
+[tr][td]Alonso[/td][td]-[/td][td]50%[/td][td]固执[/td][/tr]
+[/table]
+
+指令 3 圈内未执行则过期。
+
+[/collapse]
+
+========================================
+
+[collapse=9. 车手技能系统]
+
+每位车手有 1-2 个独特技能，在特定比赛情境下激活，临时修改 R 值。
+
+[h]9.1 技能类别与效果[/h]
+
+[h]天气技能[/h]
+
+[table]
+[tr][td][b]车手[/b][/td][td][b]技能[/b][/td][td][b]效果[/b][/td][/tr]
+[tr][td]Verstappen[/td][td]老潘课堂[/td][td]湿地 R+0.5（赛道变湿时激活一次）[/td][/tr]
+[tr][td]Stroll[/td][td]直感A[/td][td]防守或雨天 R+0.3[/td][/tr]
+[/table]
+
+[h]排位赛技能[/h]
+
+[table]
+[tr][td][b]车手[/b][/td][td][b]技能[/b][/td][td][b]效果[/b][/td][/tr]
+[tr][td]Leclerc[/td][td]勒一圈[/td][td]排位赛 R+0.5（需危险区域）[/td][/tr]
+[tr][td]Hamilton[/td][td]刘一圈[/td][td]排位赛 R+0.5（需危险区域）[/td][/tr]
+[tr][td]Magnussen[/td][td]排位神车[/td][td]排位赛 R+0.8[/td][/tr]
+[/table]
+
+[h]防守技能[/h]
+
+[table]
+[tr][td][b]车手[/b][/td][td][b]技能[/b][/td][td][b]效果[/b][/td][/tr]
+[tr][td]Sainz[/td][td]Smooth Operator[/td][td]R+0.3 基础，+0.3 集团加成[/td][/tr]
+[tr][td]Alonso[/td][td]WIDELONSO[/td][td]R+0.8/次防守；连续 10 次后 30% 损坏风险[/td][/tr]
+[tr][td]Ocon[/td][td]狮子[/td][td]防守 R+0.5；无视所有团队指令[/td][/tr]
+[tr][td]Zhou[/td][td]WIDEZHOU[/td][td]防守 R+0.5[/td][/tr]
+[/table]
+
+[h]超车/进攻技能[/h]
+
+[table]
+[tr][td][b]车手[/b][/td][td][b]技能[/b][/td][td][b]效果[/b][/td][/tr]
+[tr][td]Hamilton[/td][td]振金超车[/td][td]10% R 提升 + 10% 不被注意；10% 碰撞检查[/td][/tr]
+[tr][td]Leclerc[/td][td]极限哥[/td][td]DRS 区域 3+ 圈 R+0.5；Ra10 变形检查[/td][/tr]
+[tr][td]Tsunoda[/td][td]武士道！[/td][td]超车 R+1.0；50% 失误风险[/td][/tr]
+[/table]
+
+[h]轮胎管理技能[/h]
+
+[table]
+[tr][td][b]车手[/b][/td][td][b]技能[/b][/td][td][b]效果[/b][/td][/tr]
+[tr][td]Perez/Albon[/td][td]保胎大师[/td][td]轮胎悬崖后减少 R 损失[/td][/tr]
+[/table]
+
+[h]起步技能[/h]
+
+[table]
+[tr][td][b]车手[/b][/td][td][b]技能[/b][/td][td][b]效果[/b][/td][/tr]
+[tr][td]Bottas/Zhou[/td][td]昏厥起步[/td][td]起步 R-0.5，5%→2%→1% 惩罚概率（随比赛递减）[/td][/tr]
+[/table]
+
+[h]变量/随机技能[/h]
+
+[table]
+[tr][td][b]车手[/b][/td][td][b]技能[/b][/td][td][b]效果[/b][/td][/tr]
+[tr][td]Norris/Ricciardo[/td][td]盲盒车[/td][td]每场随机 R 修正：-0.5, -0.3, 0, +0.3, +0.5[/td][/tr]
+[tr][td]Latifi[/td][td]总导演[/td][td]30% 概率随机圈数引发事故[/td][/tr]
+[tr][td]Piastri[/td][td]抽象怪[/td][td]R+0.5（与 Leclerc 同场）；事故免疫[/td][/tr]
+[/table]
+
+[h]9.2 技能激活限制[/h]
+
+[list]
+[*]max_activations：每场比赛最大激活次数
+[*]cooldown_laps：激活间隔圈数
+[*]每圈每技能最多激活一次
+[*]"只激活一次"技能使用 max_activations=1
+[/list]
+
+[h]9.3 效果计算流程[/h]
+
+[list=1]
+[*]检查触发条件（天气、防守、进攻等）
+[*]检查激活限制（最大次数、冷却、每圈一次）
+[*]根据技能类别处理器计算效果
+[*]记录激活并更新跟踪状态
+[*]返回 SkillEffectResult（R 修正值、骰子修正值、额外骰子需求）
+[/list]
+
+[/collapse]
+
+========================================
+
+[collapse=10. 排位赛系统]
+
+[h]10.1 赛制结构[/h]
+
+[b]标准排位赛（Q1/Q2/Q3）：[/b]
+
+[table]
+[tr][td][b]阶段[/b][/td][td][b]时长[/b][/td][td][b]车手数[/b][/td][td][b]淘汰数[/b][/td][td][b]决定位置[/b][/td][/tr]
+[tr][td]Q1[/td][td]18 分钟[/td][td]20[/td][td]5[/td][td]P16-P20[/td][/tr]
+[tr][td]Q2[/td][td]15 分钟[/td][td]15[/td][td]5[/td][td]P11-P15[/td][/tr]
+[tr][td]Q3[/td][td]12 分钟[/td][td]10[/td][td]0[/td][td]P1-P10[/td][/tr]
+[/table]
+
+[b]冲刺排位赛（SQ1/SQ2/SQ3）：[/b]
+
+[table]
+[tr][td][b]阶段[/b][/td][td][b]时长[/b][/td][td][b]车手数[/b][/td][td][b]淘汰数[/b][/td][td][b]决定位置[/b][/td][/tr]
+[tr][td]SQ1[/td][td]12 分钟[/td][td]20[/td][td]5[/td][td]P16-P20[/td][/tr]
+[tr][td]SQ2[/td][td]10 分钟[/td][td]15[/td][td]5[/td][td]P11-P15[/td][/tr]
+[tr][td]SQ3[/td][td]8 分钟[/td][td]10[/td][td]0[/td][td]P1-P10[/td][/tr]
+[/table]
+
+[h]10.2 圈速影响因素[/h]
+
+[list]
+[*]轮胎配方/状态
+[*]赛道温度
+[*]赛道演变（橡胶铺设带来的抓地力提升）
+[*]交通状况
+[*]DRS 使用
+[/list]
+
+[h]10.3 事故处理（d100 骰子）[/h]
+
+[table]
+[tr][td][b]骰子[/b][/td][td][b]事件[/b][/td][td][b]后果[/b][/td][/tr]
+[tr][td]≤ 1[/td][td]撞车[/td][td]红旗，圈速删除，比赛中止[/td][/tr]
+[tr][td]≤ 3[/td][td]打滑[/td][td]黄旗，圈速删除，2-5s 损失[/td][/tr]
+[tr][td]≤ 8[/td][td]驶出赛道[/td][td]黄旗，圈速不删除，0.5-2s 损失[/td][/tr]
+[tr][td]≤ 15[/td][td]赛道限制[/td][td]圈速删除，无旗[/td][/tr]
+[/table]
+
+[b]修正因子：[/b]
+[list]
+[*]车手技术（DR）：(DR - 80)/5（-4 到 +4）
+[*]赛道状态：干燥(0)，潮湿(+3)，湿滑(+8)
+[*]压力级别：pressure_level × 5
+[*]圈阶段：出场圈(-2)，飞驰圈(0)，入场圈(-1)
+[/list]
+
+[h]10.4 轮胎分配[/h]
+
+[table]
+[tr][td][b]类型[/b][/td][td][b]总套数[/b][/td][td][b]软胎[/b][/td][td][b]中性胎[/b][/td][td][b]硬胎[/b][/td][td][b]中性胎（雨）[/b][/td][td][b]雨胎[/b][/td][/tr]
+[tr][td]标准[/td][td]13[/td][td]8[/td][td]3[/td][td]2[/td][td]4[/td][td]3[/td][/tr]
+[tr][td]冲刺[/td][td]12[/td][td]6[/td][td]4[/td][td]2[/td][td]4[/td][td]3[/td][/tr]
+[tr][td]ATA[/td][td]11[/td][td]5[/td][td]4[/td][td]2[/td][td]4[/td][td]3[/td][/tr]
+[/table]
+
+[b]规则：[/b]
+[list]
+[*]Q1/Q2：自由选择（最可能用软胎）
+[*]Q3：必须使用软胎
+[*]SQ1/SQ2：必须使用新中性胎
+[*]SQ3：必须使用新软胎
+[*]ATA：Q1→硬，Q2→中，Q3→软
+[/list]
+
+[b]另：符合FIA规则要求的轮胎返还等仍待检查。[/b]
+
+[/collapse]
+
+========================================
+
+[collapse=11. 练习赛系统]
+
+[h]11.1 环节流程[/h]
+
+每位车手在 FP1/FP2/FP3 中：
+[list]
+[*]错开发车（0-5 分钟）
+[*]根据环节进度决定跑法计划
+[/list]
+
+[b]跑法逻辑：[/b]
+[list]
+[*]早期（< 15%）：安装圈（3-5 圈）
+[*]中期（15-70%）：70% 长跑（8-15 圈），30% 飞驰圈（2-4 圈）
+[*]晚期（> 70%）：60% 排位模拟（3-5 圈），40% 飞驰圈（2-3 圈）
+[/list]
+
+[h]11.2 圈速模拟[/h]
+
+考虑因素：
+[list]
+[*]车手 R 因子：每 R 点 ≈ 0.1% 圈速
+[*]燃油负载：每公斤燃油 +0.03s
+[*]轮胎退化：软 0.08%/圈，中 0.05%/圈，硬 0.03%/圈
+[*]赛道演变：环节内最多改善 1.5%
+[*]交通状况：30% 概率遇到（0.3-2.0s 损失）
+[*]DRS：可用时 -0.3s
+[*]随机变化：高斯噪声（σ=0.1s）
+[/list]
+
+[h]11.3 调校系统[/h]
+
+5 个调校类别各掷 d6 骰子：
+
+[table]
+[tr][td][b]骰子[/b][/td][td][b]结果[/b][/td][td][b]R 修正[/b][/td][/tr]
+[tr][td]1[/td][td]差[/td][td]-0.2[/td][/tr]
+[tr][td]2[/td][td]欠佳[/td][td]-0.1[/td][/tr]
+[tr][td]3[/td][td]中性[/td][td]0.0[/td][/tr]
+[tr][td]4[/td][td]好[/td][td]+0.1[/td][/tr]
+[tr][td]5[/td][td]很好[/td][td]+0.2[/td][/tr]
+[tr][td]6[/td][td]最佳[/td][td]+0.3[/td][/tr]
+[/table]
+
+[b]加权概率：[/b] 极端值（1 和 6）概率降低，中间值（3、4）概率提高。
+
+[b]最佳调校锁定：[/b] 掷出 6 的类别锁定，后续环节不再改变。
+
+[h]11.4 封车规则[/h]
+
+[list]
+[*][b]标准周末：[/b] FP3 后封车
+[*][b]冲刺周末：[/b] 周五排位赛车辆首次离开维修区即封车，持续至周日正赛
+[/list]
+
+封车后不可更改调校（安全原因除外）。
+
+[/collapse]
+
+========================================
+
+[collapse=12. 冲刺赛系统]
+
+[h]12.1 格式与规则[/h]
+
+冲刺赛是约 100km 的短距离比赛，不强制进站。
+
+[b]冲刺赛赛道（2022 格式）：[/b]
+
+[table]
+[tr][td][b]赛道[/b][/td][td][b]大奖赛[/b][/td][td][b]长度[/b][/td][td][b]圈数[/b][/td][/tr]
+[tr][td]伊莫拉[/td][td]艾米利亚-罗马涅[/td][td]4.909 km[/td][td]21[/td][/tr]
+[tr][td]奥地利[/td][td]红牛环[/td][td]4.318 km[/td][td]24[/td][/tr]
+[tr][td]圣保罗[/td][td]巴西[/td][td]4.309 km[/td][td]24[/td][/tr]
+[/table]
+
+[b]与正赛的区别：[/b]
+
+[table]
+[tr][td][b]特征[/b][/td][td][b]正赛[/b][/td][td][b]冲刺赛[/b][/td][/tr]
+[tr][td]距离[/td][td]300+ km[/td][td]~100 km[/td][/tr]
+[tr][td]圈数[/td][td]50-70[/td][td]21-24[/td][/tr]
+[tr][td]进站[/td][td]1-3 次[/td][td]无[/td][/tr]
+[tr][td]策略[/td][td]复杂[/td][td]极简[/td][/tr]
+[tr][td]积分[/td][td]全额（25-18-15-...）[/td][td]仅前 8（8-7-6-5-4-3-2-1）[/td][/tr]
+[/table]
+
+[h]12.2 模拟细节[/h]
+
+[list]
+[*]基于 EnhancedRaceSimulator 逻辑但禁用进站
+[*]轮胎策略：默认使用中性胎
+[*]发车格可由冲刺排位赛结果提供
+[*]事故：每圈 1% 概率（d100 骰子，≤1 触发）
+[*]DRS：从赛道专用配置文件加载
+[*]套圈：使用实时套圈检测器
+[/list]
+
+[/collapse]
+
+========================================
+
+[collapse=13. 处罚系统]
+
+[b]该部分还未完工。[/b]
+
+[h]13.1 处罚类型[/h]
+
+[table]
+[tr][td][b]处罚类型[/b][/td][td][b]时间影响[/b][/td][td][b]积分[/b][/td][td][b]执行方式[/b][/td][/tr]
+[tr][td]5 秒罚时[/td][td]+5s[/td][td]1[/td][td]进站或赛后[/td][/tr]
+[tr][td]10 秒罚时[/td][td]+10s[/td][td]2[/td][td]进站或赛后[/td][/tr]
+[tr][td]15 秒罚时[/td][td]+15s[/td][td]3[/td][td]进站或赛后[/td][/tr]
+[tr][td]通过维修区[/td][td]~20s[/td][td]3[/td][td]必须通过维修区[/td][/tr]
+[tr][td]停走（5/10/15s）[/td][td]+5/10/15s + 停车[/td][td]3[/td][td]必须在维修区停车[/td][/tr]
+[tr][td]格位处罚（5/10）[/td][td]下场比赛[/td][td]0[/td][td]未来比赛[/td][/tr]
+[tr][td]末位发车[/td][td]下场比赛[/td][td]0[/td][td]未来比赛[/td][/tr]
+[tr][td]训诫[/td][td]无[/td][td]0[/td][td]口头/书面警告[/td][/tr]
+[tr][td]禁赛[/td][td]N/A[/td][td]0[/td][td]停赛[/td][/tr]
+[/table]
+
+[h]13.2 超级驾照积分[/h]
+
+[list]
+[*]每次处罚 1-3 分
+[*][b]12 分 = 自动禁赛[/b]
+[*]积分 [b]12 个月后过期[/b]
+[*][b]3 次训诫[/b]（其中 2+ 次驾驶违规）= [b]10 位格位处罚[/b]
+[*]禁赛后清零所有当前积分
+[/list]
+
+[h]13.3 触发处罚的行为[/h]
+
+[table]
+[tr][td][b]行为[/b][/td][td][b]典型处罚[/b][/td][td][b]积分[/b][/td][/tr]
+[tr][td]引发碰撞[/td][td]5-15s[/td][td]2-3[/td][/tr]
+[tr][td]驶出赛道并获利[/td][td]5s[/td][td]1[/td][/tr]
+[tr][td]蓝旗违规[/td][td]5s→通过维修区（递增）[/td][td]1-2[/td][/tr]
+[tr][td]黄旗/VSC/SC 旗违规[/td][td]5-10s[/td][td]2[/td][/tr]
+[tr][td]不安全释放[/td][td]仅时间损失（1-5s）[/td][td]0[/td][/tr]
+[tr][td]阻挡其他车手[/td][td]5s[/td][td]2[/td][/tr]
+[tr][td]维修区超速[/td][td]5s[/td][td]1[/td][/tr]
+[tr][td]蛇行[/td][td]5s[/td][td]1[/td][/tr]
+[/table]
+
+[h]13.4 蓝旗处罚递进[/h]
+
+[table]
+[tr][td][b]违规次数[/b][/td][td][b]1 次[/b][/td][td][b]2 次[/b][/td][td][b]3 次+[/b][/td][/tr]
+[tr][td]轻微[/td][td]警告[/td][td]警告[/td][td]5s[/td][/tr]
+[tr][td]中等[/td][td]警告[/td][td]5s[/td][td]通过维修区[/td][/tr]
+[tr][td]严重[/td][td]5s[/td][td]通过维修区[/td][td]停走[/td][/tr]
+[tr][td]违反[/td][td]通过维修区[/td][td]停走[/td][td]黑旗[/td][/tr]
+[/table]
+
+[/collapse]
+
+========================================
+
+[collapse=14. 套圈与解套系统]
+
+[h]14.1 蓝旗系统[/h]
+
+[b]状态：[/b] 无 → 警告 → 最终 → 已遵守 → 违规
+
+[b]触发条件：[/b]
+[list]
+[*]被套车与领先者差距 < 3.0s：警告
+[*]差距 < 1.5s：最终
+[*]领先者圈数更高
+[*]两车在同一或相邻计时段
+[/list]
+
+[h]14.2 遵守系统（d20 骰子）[/h]
+
+基础目标值 = 15（75% 遵守率）。
+
+[b]修正因子：[/b]
+
+[table]
+[tr][td][b]因素[/b][/td][td][b]修正值[/b][/td][/tr]
+[tr][td]DR 85+（每 5 点）[/td][td]+1 到 +3[/td][/tr]
+[tr][td]后方车队[/td][td]+2[/td][/tr]
+[tr][td]冠军争夺者[/td][td]-1[/td][/tr]
+[tr][td]首次出示蓝旗[/td][td]+1[/td][/tr]
+[tr][td]重复旗帜（挫败感）[/td][td]-(次数-2)[/td][/tr]
+[tr][td]赛道路段（直道/DRS）[/td][td]+2[/td][/tr]
+[tr][td]弯道入口[/td][td]-2[/td][/tr]
+[tr][td]弯道顶点[/td][td]-5[/td][/tr]
+[tr][td]制动区[/td][td]-3[/td][/tr]
+[tr][td]比赛末段（90%+）[/td][td]-2[/td][/tr]
+[tr][td]队友[/td][td]+3[/td][/tr]
+[tr][td]同盟车队[/td][td]+1[/td][/tr]
+[tr][td]对手[/td][td]-2[/td][/tr]
+[/table]
+
+[h]14.3 解套程序（FIA 规则）[/h]
+
+安全车下解套流程：
+[list=1]
+[*]SC 出动 → 检查被套车辆
+[*]比赛控制根据 SC 时长、被套车数量、赛道条件、剩余圈数决定授权
+[*]宣布"被套车辆可以超车"
+[*]被套车超越领先者和 SC，重新加入队尾
+[*]最后一辆被套车超越领先者后下一圈 SC 进站
+[*]比赛恢复
+[/list]
+
+[b]条件：[/b] 最少 3 圈 SC、干燥条件、最少 5 圈剩余、最多 10 辆车。
+
+[/collapse]
+
+========================================
+
+[collapse=15. 数据流与系统集成]
+
+[h]15.1 完整数据流[/h]
+
+[code]
+1. 数据加载
+   ├─ 车手评分 → driver_ratings.csv (DR)
+   ├─ 车队参数 → spain_team.csv (Mech, Aero, Power)
+   └─ 赛道数据 → track_characteristics.csv (C_M, C_A, C_P)
+
+2. R 值计算
+   ├─ PR = C_M×Mech + C_A×Aero + C_P×Power
+   ├─ R = DR × PR / 100
+   └─ 应用 2 号车手补偿
+
+3. 比赛周末流程
+   ├─ FP1/FP2/FP3 → 调校骰子 → R 值修正 (±0.5)
+   ├─ 排位赛 → Q1/Q2/Q3 → 发车格
+   ├─ 冲刺赛（如有）→ 冲刺结果
+   └─ 正赛
+       ├─ 发车模拟（反应时间 + 格位惩罚）
+       ├─ 逐圈循环
+       │   ├─ 天气更新
+       │   ├─ 事故检查（骰子）
+       │   ├─ 超车检查（概率 + 对抗骰子）
+       │   ├─ 进站处理
+       │   ├─ 圈速计算（基础 + 退化 + 噪声 + 配方 + 事故 + SC/VSC）
+       │   └─ 技能激活检查
+       ├─ 最终成绩（按有效圈数和累计时间排序）
+       └─ 输出（CSV + Markdown 报告）
+
+[/code]
+
+[h]15.2 环节间依赖关系[/h]
+
+[table]
+[tr][td][b]上游环节[/b][/td][td][b]下游环节[/b][/td][td][b]数据传递[/b][/td][/tr]
+[tr][td]练习赛[/td][td]排位赛/正赛[/td][td]调校 R 值修正[/td][/tr]
+[tr][td]排位赛[/td][td]正赛[/td][td]发车格位置[/td][/tr]
+[tr][td]冲刺排位赛[/td][td]冲刺赛[/td][td]冲刺发车格[/td][/tr]
+[tr][td]冲刺赛[/td][td]正赛[/td][td]正赛发车格（可选）[/td][/tr]
+[tr][td]正赛模拟[/td][td]策略分析[/td][td]历史结果用于策略权重调整[/td][/tr]
+[/table]
+
+[h]15.3 输出文件[/h]
+
+系统生成以下输出：
+[list]
+[*]outputs/ 目录下的 CSV 结果文件
+[*]骰子记录 CSV
+[*]Markdown 格式比赛报告
+[*]可视化图表（圈速散点图、位置变化图）
+[/list]
+
+[/collapse]
+
+========================================
+
+[h]附录：常用符号说明[/h]
+
+[table]
+[tr][td][b]符号[/b][/td][td][b]含义[/b][/td][/tr]
+[tr][td]DR[/td][td]车手评分（Driver Rating）[/td][/tr]
+[tr][td]PR[/td][td]赛车性能评分（Performance Rating）[/td][/tr]
+[tr][td]R[/td][td]综合评分（R = DR × PR / 100）[/td][/tr]
+[tr][td]C_M, C_A, C_P[/td][td]赛道系数（机械、空力、动力需求）[/td][/tr]
+[tr][td]d10/d20/d100[/td][td]10 面/20 面/100 面骰子[/td][/tr]
+[tr][td]TN[/td][td]目标值（Target Number）[/td][/tr]
+[tr][td]SC[/td][td]安全车（Safety Car）[/td][/tr]
+[tr][td]VSC[/td][td]虚拟安全车（Virtual Safety Car）[/td][/tr]
+[tr][td]DRS[/td][td]减阻系统（Drag Reduction System）[/td][/tr]
+[tr][td]FP[/td][td]自由练习赛（Free Practice）[/td][/tr]
+[tr][td]Q1/Q2/Q3[/td][td]排位赛三个阶段[/td][/tr]
+[tr][td]SQ1/SQ2/SQ3[/td][td]冲刺排位赛三个阶段[/td][/tr]
+[/table]
+
